@@ -15,4 +15,4 @@ export interface FactoryManifest {
 }
 
 /** forge-core semantic version, surfaced for `forge doctor`/`status`. */
-export const FORGE_CORE_VERSION = "0.0.0";
+export const FORGE_CORE_VERSION = '0.0.0';

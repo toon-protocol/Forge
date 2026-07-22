@@ -15,7 +15,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b",
     "clean": "tsc -b --clean"
   }
 }

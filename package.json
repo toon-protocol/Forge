@@ -2,6 +2,7 @@
   "name": "@toon-protocol/forge-monorepo",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "description": "Forge — the factory manager for the toon-protocol software-factory substrate.",
   "license": "MIT",
   "packageManager": "pnpm@8.15.9",
@@ -11,10 +12,27 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "clean": "pnpm -r clean"
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write \"packages/*/src/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
+    "clean": "pnpm -r clean",
+    "sandcastle": "tsx .sandcastle/main.ts",
+    "sandcastle:plan": "tsx .sandcastle/plan-dry-run.ts",
+    "sandcastle:implement": "tsx .sandcastle/agent-implement-issue.ts",
+    "sandcastle:review": "tsx .sandcastle/agent-review-pr.ts"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "0.12.0",
+    "@eslint/js": "^9.0.0",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.2"
+    "@vitest/coverage-v8": "^1.6.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^1.6.1"
   }
 }

@@ -5,22 +5,30 @@
  * honest about being empty. Real verbs land in #218-#221.
  */
 
-import type { ForgeCommand } from "./index.js";
-import { version } from "./index.js";
+import type { ForgeCommand } from './index.js';
+import { version } from './index.js';
 
-const KNOWN: readonly ForgeCommand[] = ["new", "validate", "doctor", "upgrade", "status"];
+const KNOWN: readonly ForgeCommand[] = [
+  'new',
+  'validate',
+  'doctor',
+  'upgrade',
+  'status',
+];
 
 function main(argv: readonly string[]): number {
   const [cmd] = argv;
-  if (cmd === "--version" || cmd === "-v") {
+  if (cmd === '--version' || cmd === '-v') {
     process.stdout.write(`${version()}\n`);
     return 0;
   }
   if (cmd !== undefined && (KNOWN as readonly string[]).includes(cmd)) {
-    process.stderr.write(`forge ${cmd}: not implemented yet (scaffold stub, see #212).\n`);
+    process.stderr.write(
+      `forge ${cmd}: not implemented yet (scaffold stub, see #212).\n`
+    );
     return 2;
   }
-  process.stderr.write(`usage: forge <${KNOWN.join(" | ")}>\n`);
+  process.stderr.write(`usage: forge <${KNOWN.join(' | ')}>\n`);
   return 1;
 }
 
