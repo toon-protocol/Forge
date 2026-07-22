@@ -1,0 +1,21 @@
+{
+  "name": "@toon-protocol/forge-cli",
+  "version": "0.0.0",
+  "description": "forge new | validate | doctor | upgrade | status. Stub — see #218-#221.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "forge": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "dependencies": {
+    "@toon-protocol/forge-core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "clean": "tsc -b --clean"
+  }
+}
