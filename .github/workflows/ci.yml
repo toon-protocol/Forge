@@ -1,0 +1,46 @@
+name: CI
+
+# The outer, authoritative gate (ARCHITECTURE.md §4, Rule 3). Runs the full
+# tier ladder on every PR ref; branch protection makes this the check of record.
+# Forge's green-baseline law (#214): this gate is wired only because it is green
+# on HEAD. The in-loop sandbox.exec() gates are advisory; this is the verdict.
+#
+# No devbox job yet — Forge's environment.devbox is false at bootstrap; a
+# Devbox/Nix-backed environment is a later opt-in, not a scaffold requirement.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: lint
+        run: pnpm lint
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: test
+        run: pnpm test
+
+      - name: build
+        run: pnpm build
+
+      - name: format
+        run: pnpm format:check

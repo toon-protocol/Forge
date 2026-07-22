@@ -8,10 +8,10 @@
  *   forge upgrade          — regenerate stamped files from templates as a gated PR (#221)
  */
 
-import { FORGE_CORE_VERSION } from "@toon-protocol/forge-core";
+import { FORGE_CORE_VERSION } from '@toon-protocol/forge-core';
 
 /** The `forge` verbs planned for this CLI. */
-export type ForgeCommand = "new" | "validate" | "doctor" | "upgrade" | "status";
+export type ForgeCommand = 'new' | 'validate' | 'doctor' | 'upgrade' | 'status';
 
 /** Scaffold placeholder: reports the linked forge-core version. */
 export function version(): string {
