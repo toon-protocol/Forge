@@ -1,0 +1,61 @@
+# nightly — the scheduled surface (ARCHITECTURE.md §4 tier 3): runs oracle
+# tiers too `expensive` to gate every PR (factory.toml `[[oracle.tier]]`
+# entries whose `surfaces` include "nightly"). A regression files a triaged
+# issue with the failure's reproducer artifacts attached — the oracle
+# generates work orders, the same `agent:implement` loop consumes them
+# (ARCHITECTURE.md §4).
+#
+# Until forge-core (toon-protocol/Forge#7/#8) resolves nightly tiers from
+# factory.toml, a stamped repo names its own nightly entrypoint via the
+# `nightly` package.json script, same as this template invokes below.
+
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    name: Nightly oracle tiers
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run nightly oracle tiers
+        run: pnpm run nightly
+
+      - name: Upload reproducer artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-artifacts
+          path: nightly-artifacts/
+          if-no-files-found: ignore
+
+      - name: File a triaged issue on regression
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body=$'Nightly oracle tiers failed. Run: '"$RUN_URL"$'\n\nReproducer artifacts (if any) are attached to that run.'
+          gh issue create \
+            --title "nightly: oracle regression $(date -u +%Y-%m-%d)" \
+            --label "agent:implement" \
+            --body "$body"
