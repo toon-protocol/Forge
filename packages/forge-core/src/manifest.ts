@@ -358,7 +358,8 @@ function validateOracleTiers(
 }
 
 const LOOP_KEYS = ['template', 'inner_gates', 'context_ceiling', 'models'];
-const LOOP_MODELS_KEYS = [...ROLES];
+const LOOP_MODELS_KEYS: readonly string[] = ROLES;
+const DEFAULT_CONTEXT_CEILING = 0.6;
 
 function validateLoop(
   raw: unknown,
@@ -397,7 +398,7 @@ function validateLoop(
   }
   let ceiling: number;
   if (contextCeiling === undefined) {
-    ceiling = 0.6;
+    ceiling = DEFAULT_CONTEXT_CEILING;
   } else if (
     typeof contextCeiling === 'number' &&
     contextCeiling > 0 &&
@@ -407,7 +408,7 @@ function validateLoop(
   } else {
     errors.push('[loop].context_ceiling: MUST satisfy 0 < x <= 1 (§5)');
     ok = false;
-    ceiling = 0.6;
+    ceiling = DEFAULT_CONTEXT_CEILING;
   }
   if (!isRecord(models)) {
     errors.push('[loop.models]: table is required (§5.1, §8.5)');
