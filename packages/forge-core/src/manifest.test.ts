@@ -1,6 +1,6 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -9,12 +9,7 @@ import {
   parseManifest,
 } from './manifest.js';
 
-const REPO_ROOT = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..'
-);
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 // The worked example from FACTORY_SPEC.md §9 (Forge's own self-host manifest).
 const VALID_MANIFEST = `
@@ -228,7 +223,7 @@ describe('loadManifest', () => {
   });
 
   it("Forge's own repo-root factory.toml validates and gates on format:check (#40)", async () => {
-    const manifest = await loadManifest(join(REPO_ROOT, 'factory.toml'));
+    const manifest = await loadManifest(join(repoRoot, 'factory.toml'));
 
     const formatTier = manifest.oracleTiers.find(
       (tier) => tier.run === 'pnpm format:check'
