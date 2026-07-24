@@ -28,9 +28,13 @@ import type {
 import type { PullRequestRef } from '@toon-protocol/forge-core';
 import { splitTableRowCells } from './markdown-table.js';
 
-/** `toon-meta` is the org's single source of truth for the factory registry (FACTORY_SPEC.md §8.2). */
-const REGISTRY_REPO = 'toon-protocol/toon-meta';
-const REGISTRY_PATH = 'FACTORY.md';
+/**
+ * `toon-meta` is the org's single source of truth for the factory registry
+ * (FACTORY_SPEC.md §8.2). Exported so `validate.ts` (Forge#11) reads the
+ * exact same repo/path this module writes to.
+ */
+export const REGISTRY_REPO = 'toon-protocol/toon-meta';
+export const REGISTRY_PATH = 'FACTORY.md';
 const REGISTRY_BASE_BRANCH = 'main';
 
 const SECTION_HEADING = '## Per-repo factory table';
@@ -210,7 +214,8 @@ export interface RegistryGhClient {
   }) => Promise<void>;
 }
 
-function decodeBase64(content: string): string {
+/** Decodes a `gh api .../contents/...` response's base64 `content` field. Exported for the same reason as {@link REGISTRY_REPO}. */
+export function decodeBase64(content: string): string {
   return Buffer.from(content, 'base64').toString('utf-8');
 }
 

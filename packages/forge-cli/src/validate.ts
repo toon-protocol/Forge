@@ -34,10 +34,13 @@ import {
   ManifestValidationError,
 } from '@toon-protocol/forge-core';
 import {
+  decodeBase64,
   escapeCell,
   findFactoryRowCells,
   gateSummary,
   pkgMgrLabel,
+  REGISTRY_PATH,
+  REGISTRY_REPO,
 } from './register.js';
 import { parseArchetypeCatalog } from './new.js';
 import { defaultTemplatesRoot } from './stamp.js';
@@ -45,9 +48,6 @@ import {
   archetypeDriftWarnings,
   modelDivergenceWarnings,
 } from './validate-stamp.js';
-
-const REGISTRY_REPO = 'toon-protocol/toon-meta';
-const REGISTRY_PATH = 'FACTORY.md';
 
 export interface ValidateDeps {
   /** Path to the `factory.toml` to validate. Defaults to `./factory.toml`. */
@@ -62,10 +62,6 @@ export interface ValidateResult {
   readonly manifest: FactoryManifest;
   /** Non-failing surfaces: archetype drift (§2.1) + model divergence (§5.1). */
   readonly warnings: readonly string[];
-}
-
-function decodeBase64(content: string): string {
-  return Buffer.from(content, 'base64').toString('utf-8');
 }
 
 /** Reads `toon-meta/FACTORY.md` via the host `gh`. */
