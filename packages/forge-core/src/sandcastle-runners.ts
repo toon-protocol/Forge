@@ -218,7 +218,14 @@ export interface SandcastleRunners {
   readonly exec: Execer;
   readonly runReview: ReviewRunner;
   readonly openPr: PrOpener;
-  /** Tears down the sandbox `runImplement` created. No-op if `runImplement` never ran. */
+  /**
+   * Opens the shared sandbox on an EXISTING branch (a PR head) so `runReview`
+   * / `exec` can run without an implement phase — the standalone `agent:review`
+   * path (Forge#24b). Unlike `runImplement` it passes no `baseBranch`, so the
+   * existing branch is checked out rather than branched from `main`.
+   */
+  readonly prepareForReview: (branch: string) => Promise<void>;
+  /** Tears down the sandbox `runImplement`/`prepareForReview` created. No-op if neither ran. */
   readonly close: () => Promise<void>;
 }
 
@@ -301,6 +308,14 @@ export function createSandcastleRunners(
     return toIteration(result);
   };
 
+  const prepareForReview = async (branch: string): Promise<void> => {
+    sandbox = await createSandboxFn({
+      branch,
+      sandbox: config.sandboxProvider,
+      hooks: config.hooks,
+    });
+  };
+
   const exec: Execer = async (command, options) =>
     requireSandbox().exec(command, options);
 
@@ -360,5 +375,13 @@ export function createSandcastleRunners(
     }
   };
 
-  return { runPlan, runImplement, exec, runReview, openPr, close };
+  return {
+    runPlan,
+    runImplement,
+    exec,
+    runReview,
+    openPr,
+    prepareForReview,
+    close,
+  };
 }

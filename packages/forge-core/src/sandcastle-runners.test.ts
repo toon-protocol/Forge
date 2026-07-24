@@ -250,6 +250,39 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     expect(sandbox.close).toHaveBeenCalledTimes(1);
   });
 
+  it('prepareForReview opens the sandbox on an existing branch (no baseBranch) so runReview runs without an implement phase', async () => {
+    const sandbox = fakeSandbox({
+      run: vi.fn(async () =>
+        sandboxRunResult({ commits: [{ sha: 'review-1' }] })
+      ),
+      exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    });
+    const createSandbox = vi.fn(async () => sandbox);
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+      baseBranch: 'main',
+    });
+
+    // No runImplement — review-only path.
+    await runners.prepareForReview('sandcastle/issue-99');
+
+    expect(createSandbox).toHaveBeenCalledTimes(1);
+    const opts = createSandbox.mock.calls[0]![0];
+    expect(opts.branch).toBe('sandcastle/issue-99');
+    expect(opts.baseBranch).toBeUndefined();
+
+    const review = await runners.runReview(AGENT, 'sandcastle/issue-99');
+    expect(review.commits).toEqual([{ sha: 'review-1' }]);
+
+    const pushed = await runners.exec('git push origin sandcastle/issue-99');
+    expect(pushed.exitCode).toBe(0);
+
+    await runners.close();
+    expect(sandbox.close).toHaveBeenCalledTimes(1);
+  });
+
   it('openPr pushes the branch and opens a PR when none is open yet', async () => {
     const sandbox = fakeSandbox({
       run: vi.fn(async () => sandboxRunResult()),

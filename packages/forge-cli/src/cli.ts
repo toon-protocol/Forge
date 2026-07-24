@@ -2,18 +2,22 @@
 /**
  * `forge` entrypoint.
  *
- * `run` is live (#24): it drives one `agent:implement` issue through
- * forge-core's `runCycle` on the repo's `factory.toml`. The remaining verbs
- * are scaffold stubs (#212) — they recognize the surface and exit non-zero so
- * the bin is wired but honest about being empty. They land in #218-#221.
+ * `run` and `review` are live (#24): `run` drives one `agent:implement` issue
+ * through forge-core's `runCycle`, and `review` runs the reviewer standalone
+ * over one `agent:review` PR — both on the repo's `factory.toml`. The remaining
+ * verbs are scaffold stubs (#212) — they recognize the surface and exit
+ * non-zero so the bin is wired but honest about being empty. They land in
+ * #218-#221.
  */
 
 import type { ForgeCommand } from './index.js';
 import { version } from './index.js';
 import { forgeRun } from './run.js';
+import { forgeReview } from './review.js';
 
 const KNOWN: readonly ForgeCommand[] = [
   'run',
+  'review',
   'new',
   'validate',
   'doctor',
@@ -47,6 +51,21 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     const pr = await forgeRun({ issueNumber });
     process.stdout.write(`forge run: opened PR #${pr.number} — ${pr.url}\n`);
+    return 0;
+  }
+
+  if (cmd === 'review') {
+    const prNumber = process.env.SANDCASTLE_PR_NUMBER?.trim();
+    if (!prNumber) {
+      process.stderr.write(
+        'forge review: SANDCASTLE_PR_NUMBER must be set to the agent:review PR number.\n'
+      );
+      return 2;
+    }
+    const outcome = await forgeReview({ prNumber });
+    process.stdout.write(
+      `forge review: ${outcome.pushedCommits} commit(s) pushed to ${outcome.branch}.\n`
+    );
     return 0;
   }
 
