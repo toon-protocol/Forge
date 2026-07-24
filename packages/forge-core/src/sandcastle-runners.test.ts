@@ -283,7 +283,7 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     expect(sandbox.close).toHaveBeenCalledTimes(1);
   });
 
-  it('openPr pushes the branch and opens a PR when none is open yet', async () => {
+  it('openPr pushes the branch and opens a PR when none is open yet (success on first try)', async () => {
     const sandbox = fakeSandbox({
       run: vi.fn(async () => sandboxRunResult()),
       exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -292,10 +292,10 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
 
     const prList = vi
       .fn()
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]) // idempotency pre-check (state: all)
       .mockResolvedValueOnce([
         { number: 7, url: 'https://example.com/pull/7' },
-      ]);
+      ]); // post-create verification (state: open)
     const prCreate = vi.fn(async () => {});
     const gh: GhClient = { prList, prCreate };
 
@@ -312,6 +312,7 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     expect(sandbox.exec).toHaveBeenCalledWith(
       `git push -u origin ${DISPATCH.branch}`
     );
+    expect(prCreate).toHaveBeenCalledTimes(1);
     expect(prCreate).toHaveBeenCalledWith({
       base: 'main',
       head: DISPATCH.branch,
@@ -321,7 +322,7 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     expect(pr).toEqual({ number: 7, url: 'https://example.com/pull/7' });
   });
 
-  it('openPr skips pr create when a PR is already open for the branch', async () => {
+  it('openPr skips pr create when a PR is already open for the branch (idempotent, no duplicate)', async () => {
     const sandbox = fakeSandbox({
       run: vi.fn(async () => sandboxRunResult()),
       exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -342,7 +343,35 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     const pr = await runners.openPr(DISPATCH, ISSUE);
 
     expect(prCreate).not.toHaveBeenCalled();
+    expect(prList).toHaveBeenCalledWith({
+      branch: DISPATCH.branch,
+      state: 'all',
+    });
     expect(pr).toEqual({ number: 5, url: 'https://example.com/pull/5' });
+  });
+
+  it('openPr skips pr create when a CLOSED PR already exists for the branch', async () => {
+    const sandbox = fakeSandbox({
+      run: vi.fn(async () => sandboxRunResult()),
+      exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    });
+    const createSandbox = vi.fn(async () => sandbox);
+    const prList = vi
+      .fn()
+      .mockResolvedValue([{ number: 9, url: 'https://example.com/pull/9' }]);
+    const prCreate = vi.fn(async () => {});
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+      gh: { prList, prCreate },
+    });
+    await runners.runImplement(AGENT, DISPATCH);
+
+    const pr = await runners.openPr(DISPATCH, ISSUE);
+
+    expect(prCreate).not.toHaveBeenCalled();
+    expect(pr).toEqual({ number: 9, url: 'https://example.com/pull/9' });
   });
 
   it('openPr fails loud when the push fails', async () => {
@@ -371,7 +400,7 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     expect(prList).not.toHaveBeenCalled();
   });
 
-  it('openPr fails loud when no PR exists after the create attempt (silent failure)', async () => {
+  it('openPr fails loud when no PR exists after the create attempt (silent failure), retries exhausted', async () => {
     const sandbox = fakeSandbox({
       run: vi.fn(async () => sandboxRunResult()),
       exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -384,11 +413,130 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
       sandboxProvider: SANDBOX_PROVIDER,
       createSandbox,
       gh: { prList, prCreate },
+      prCreateRetry: { delaysMs: [] }, // single attempt, no waiting
     });
     await runners.runImplement(AGENT, DISPATCH);
 
     await expect(runners.openPr(DISPATCH, ISSUE)).rejects.toThrow(
       /no OPEN PR exists/
     );
+  });
+
+  it('openPr retries after a failed prCreate attempt and succeeds (success-after-retry)', async () => {
+    const sandbox = fakeSandbox({
+      run: vi.fn(async () => sandboxRunResult()),
+      exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    });
+    const createSandbox = vi.fn(async () => sandbox);
+
+    const prList = vi
+      .fn()
+      .mockResolvedValueOnce([]) // pre-check, attempt 1
+      .mockResolvedValueOnce([]) // pre-check, attempt 2 (still no server-side PR)
+      .mockResolvedValueOnce([
+        { number: 12, url: 'https://example.com/pull/12' },
+      ]); // post-create verification, attempt 2
+    const prCreate = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error('GraphQL: Something went wrong while executing your query')
+      )
+      .mockResolvedValueOnce(undefined);
+    const sleep = vi.fn(async () => {});
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+      gh: { prList, prCreate },
+      prCreateRetry: { delaysMs: [2000, 8000], sleep },
+    });
+    await runners.runImplement(AGENT, DISPATCH);
+
+    const pr = await runners.openPr(DISPATCH, ISSUE);
+
+    expect(prCreate).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(2000);
+    expect(pr).toEqual({ number: 12, url: 'https://example.com/pull/12' });
+  });
+
+  it('openPr rechecks for a server-side success before retrying, instead of blindly re-creating', async () => {
+    const sandbox = fakeSandbox({
+      run: vi.fn(async () => sandboxRunResult()),
+      exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    });
+    const createSandbox = vi.fn(async () => sandbox);
+
+    const prList = vi
+      .fn()
+      .mockResolvedValueOnce([]) // pre-check, attempt 1 — nothing yet
+      .mockResolvedValueOnce([
+        { number: 21, url: 'https://example.com/pull/21' },
+      ]); // pre-check, attempt 2 — a 500 masked a server-side success
+    const prCreate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('HTTP 500 (empty body)'));
+    const sleep = vi.fn(async () => {});
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+      gh: { prList, prCreate },
+      prCreateRetry: { delaysMs: [2000], sleep },
+    });
+    await runners.runImplement(AGENT, DISPATCH);
+
+    const pr = await runners.openPr(DISPATCH, ISSUE);
+
+    expect(prCreate).toHaveBeenCalledTimes(1);
+    expect(pr).toEqual({ number: 21, url: 'https://example.com/pull/21' });
+  });
+
+  it('openPr exhausts every retry, throws naming the pushed branch + a recovery command, and never deletes the branch', async () => {
+    const sandbox = fakeSandbox({
+      run: vi.fn(async () => sandboxRunResult()),
+      exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    });
+    const createSandbox = vi.fn(async () => sandbox);
+
+    const prList = vi.fn().mockResolvedValue([]);
+    const prCreate = vi
+      .fn()
+      .mockRejectedValue(new Error('HTTP 500 (empty body)'));
+    const issueComment = vi.fn(async () => {});
+    const sleep = vi.fn(async () => {});
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+      gh: { prList, prCreate, issueComment },
+      baseBranch: 'main',
+      prCreateRetry: { delaysMs: [2000, 8000], sleep },
+    });
+    await runners.runImplement(AGENT, DISPATCH);
+
+    await expect(runners.openPr(DISPATCH, ISSUE)).rejects.toThrow(
+      new RegExp(
+        `${DISPATCH.branch}.*IS pushed.*gh pr create --base main --head ${DISPATCH.branch}`,
+        's'
+      )
+    );
+    expect(prCreate).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+
+    expect(issueComment).toHaveBeenCalledTimes(1);
+    const commentArgs = issueComment.mock.calls[0]![0];
+    expect(commentArgs.issue).toBe(ISSUE.id);
+    expect(commentArgs.body).toContain(DISPATCH.branch);
+    expect(commentArgs.body).toContain('gh pr create');
+
+    const execCalls = (sandbox.exec as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call: unknown[]) => call[0]
+    );
+    expect(
+      execCalls.some(
+        (cmd) => typeof cmd === 'string' && /branch\s+-[dD]/.test(cmd)
+      )
+    ).toBe(false);
   });
 });

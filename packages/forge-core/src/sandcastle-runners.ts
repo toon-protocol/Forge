@@ -15,6 +15,19 @@
  * runner against a faked/ephemeral sandbox with no live Actions run — the
  * same structural-stub seam `loop.ts`/`cycle.ts` already use for
  * `Iteration`/`Execer`.
+ *
+ * `openPr`'s `gh pr create` call is wrapped in a bounded, idempotent retry
+ * (Forge#43): a transient API blip (observed as a bare 500/GraphQL failure
+ * with no exposed HTTP status — `gh` surfaces it as an opaque
+ * `execFileSync` throw) must not discard the already-pushed, already-reviewed
+ * branch. Before every attempt — including the first — it looks for an
+ * existing open OR closed PR for the branch and returns it if found, since a
+ * failed attempt can mask a server-side success; a blind retry would then
+ * 422 on an already-created PR. If every attempt is exhausted, it throws
+ * (the run still exits non-zero) but never before logging the pushed branch
+ * name and a copy-pasteable recovery `gh pr create` command, and posting the
+ * same as an issue comment when `gh.issueComment` is wired up — the pushed
+ * branch itself is never deleted on this path.
  */
 import { execFileSync } from 'node:child_process';
 import * as sandcastle from '@ai-hero/sandcastle';
@@ -154,6 +167,11 @@ export interface GhClient {
     readonly title: string;
     readonly body: string;
   }) => Promise<void>;
+  /** Best-effort recovery breadcrumb (Forge#43) — leaves the pushed branch + recovery command on the issue when every `prCreate` retry is exhausted. Optional: no-op if omitted. */
+  readonly issueComment?: (args: {
+    readonly issue: string;
+    readonly body: string;
+  }) => Promise<void>;
 }
 
 const defaultGhClient: GhClient = {
@@ -192,7 +210,31 @@ const defaultGhClient: GhClient = {
       { stdio: 'inherit' }
     );
   },
+  async issueComment({ issue, body }) {
+    execFileSync('gh', ['issue', 'comment', issue, '--body', body], {
+      stdio: 'inherit',
+    });
+  },
 };
+
+/** Delays (ms) waited before each retry of a failed `gh pr create` (Forge#43) — the outage this guards against saw transient 500s clear within minutes. */
+export const DEFAULT_PR_CREATE_RETRY_DELAYS_MS: readonly number[] = [
+  2000, 8000, 30000, 60000, 120000,
+];
+
+export type Sleep = (ms: number) => Promise<void>;
+
+const defaultSleep: Sleep = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Idempotency check (Forge#43): a transient `prCreate` failure (500/GraphQL blip) can mask a server-side success, so every attempt — including the first — looks for an existing PR (open OR closed) before creating another. */
+async function findExistingPr(
+  gh: GhClient,
+  branch: string
+): Promise<{ readonly number: number; readonly url: string } | undefined> {
+  const [existing] = await gh.prList({ branch, state: 'all' });
+  return existing;
+}
 
 export interface SandcastleRunnersConfig {
   /** Sandbox provider shared by every phase (e.g. `docker({ env: sandboxSecrets() })`). */
@@ -210,6 +252,12 @@ export interface SandcastleRunnersConfig {
   readonly gh?: GhClient;
   readonly runPlanAgent?: PlanAgentRun;
   readonly createSandbox?: CreateSandboxFn;
+  /** Retry policy for the PR-open step's `gh pr create` call (Forge#43). Default: {@link DEFAULT_PR_CREATE_RETRY_DELAYS_MS} with a real `setTimeout`-backed sleep. */
+  readonly prCreateRetry?: {
+    /** Delay before each retry — length is the retry count (attempts = length + 1). Default: {@link DEFAULT_PR_CREATE_RETRY_DELAYS_MS}. */
+    readonly delaysMs?: readonly number[];
+    readonly sleep?: Sleep;
+  };
 }
 
 export interface SandcastleRunners {
@@ -247,6 +295,9 @@ export function createSandcastleRunners(
   const gh = config.gh ?? defaultGhClient;
   const runPlanAgent = config.runPlanAgent ?? defaultRunPlanAgent;
   const createSandboxFn = config.createSandbox ?? sandcastle.createSandbox;
+  const prCreateRetryDelaysMs =
+    config.prCreateRetry?.delaysMs ?? DEFAULT_PR_CREATE_RETRY_DELAYS_MS;
+  const sleep = config.prCreateRetry?.sleep ?? defaultSleep;
 
   let sandbox: Sandbox | undefined;
 
@@ -340,32 +391,71 @@ export function createSandcastleRunners(
       );
     }
 
-    const [existingPr] = await gh.prList({
-      branch: dispatch.branch,
-      state: 'open',
-    });
-    if (existingPr) {
-      return existingPr;
-    }
+    const prBody =
+      'Produced by the sandcastle `agent:implement` runner; awaiting human review.\n\n' +
+      `Closes #${issue.id}\n\n` +
+      '🤖 Generated with [Claude Code](https://claude.com/claude-code)';
+    const recoveryCommand =
+      `gh pr create --base ${baseBranch} --head ${dispatch.branch} ` +
+      `--title ${JSON.stringify(issue.title)} --body ${JSON.stringify(prBody)}`;
 
-    await gh.prCreate({
-      base: baseBranch,
-      head: dispatch.branch,
-      title: issue.title,
-      body:
-        'Produced by the sandcastle `agent:implement` runner; awaiting human review.\n\n' +
-        `Closes #${issue.id}\n\n` +
-        '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
-    });
+    const attempts = prCreateRetryDelaysMs.length + 1;
+    let lastError: unknown;
 
-    const openPrs = await gh.prList({ branch: dispatch.branch, state: 'open' });
-    const pr = openPrs[0];
-    if (!pr) {
-      throw new Error(
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      // Forge#43: re-check before every attempt (including the first) — a
+      // prior attempt's opaque failure can mask a server-side success, and a
+      // blind retry would then 422 on an already-created PR.
+      const existing = await findExistingPr(gh, dispatch.branch);
+      if (existing) {
+        return existing;
+      }
+
+      const delayMs =
+        attempt > 0 ? prCreateRetryDelaysMs[attempt - 1] : undefined;
+      if (delayMs !== undefined) {
+        await sleep(delayMs);
+      }
+
+      try {
+        await gh.prCreate({
+          base: baseBranch,
+          head: dispatch.branch,
+          title: issue.title,
+          body: prBody,
+        });
+      } catch (err) {
+        lastError = err;
+        continue;
+      }
+
+      const [pr] = await gh.prList({ branch: dispatch.branch, state: 'open' });
+      if (pr) {
+        return pr;
+      }
+      lastError = new Error(
         `the open-pr phase reported success, but no OPEN PR exists for branch '${dispatch.branch}' — the push and/or gh pr create likely failed silently.`
       );
     }
-    return pr;
+
+    // Every attempt exhausted (Forge#43): the expensive implement+review work
+    // is already pushed to origin and must not be discarded — surface loud,
+    // actionable recovery instead of a bare throw.
+    const message =
+      `open-pr: gave up after ${attempts} attempts to create a PR for branch '${dispatch.branch}'.\n` +
+      `The branch IS pushed to origin — the completed implement+review work is NOT lost.\n` +
+      `Recover by running:\n  ${recoveryCommand}\n` +
+      `Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
+    console.error(message);
+    if (gh.issueComment) {
+      await gh.issueComment({
+        issue: issue.id,
+        body:
+          `⚠️ PR creation failed after ${attempts} attempts, but branch \`${dispatch.branch}\` ` +
+          `is pushed and the work is complete. Recover with:\n\n\`\`\`\n${recoveryCommand}\n\`\`\``,
+      });
+    }
+    throw new Error(message);
   };
 
   const close = async (): Promise<void> => {

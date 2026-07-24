@@ -79,8 +79,10 @@ export {
   type PlanAgentRun,
   type CreateSandboxFn,
   type GhClient,
+  type Sleep,
   type SandcastleRunnersConfig,
   type SandcastleRunners,
+  DEFAULT_PR_CREATE_RETRY_DELAYS_MS,
   branchForIssue,
   createSandcastleRunners,
 } from './sandcastle-runners.js';
