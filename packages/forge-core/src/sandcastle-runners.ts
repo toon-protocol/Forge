@@ -399,20 +399,20 @@ export function createSandcastleRunners(
       `gh pr create --base ${baseBranch} --head ${dispatch.branch} ` +
       `--title ${JSON.stringify(issue.title)} --body ${JSON.stringify(prBody)}`;
 
-    const attempts = prCreateRetryDelaysMs.length + 1;
+    // No delay before the first attempt, then one entry per retry.
+    const delaySchedule: readonly (number | undefined)[] = [
+      undefined,
+      ...prCreateRetryDelaysMs,
+    ];
+    const attempts = delaySchedule.length;
     let lastError: unknown;
 
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      // Forge#43: re-check before every attempt (including the first) — a
-      // prior attempt's opaque failure can mask a server-side success, and a
-      // blind retry would then 422 on an already-created PR.
+    for (const delayMs of delaySchedule) {
       const existing = await findExistingPr(gh, dispatch.branch);
       if (existing) {
         return existing;
       }
 
-      const delayMs =
-        attempt > 0 ? prCreateRetryDelaysMs[attempt - 1] : undefined;
       if (delayMs !== undefined) {
         await sleep(delayMs);
       }
