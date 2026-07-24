@@ -4,16 +4,20 @@
  *
  * `run` and `review` are live (#24): `run` drives one `agent:implement` issue
  * through forge-core's `runCycle`, and `review` runs the reviewer standalone
- * over one `agent:review` PR — both on the repo's `factory.toml`. The remaining
- * verbs are scaffold stubs (#212) — they recognize the surface and exit
- * non-zero so the bin is wired but honest about being empty. They land in
- * #218-#221.
+ * over one `agent:review` PR — both on the repo's `factory.toml`. `new` is
+ * live (#26) for the parse+resolve half only — it prints a resolved
+ * `StampPlan` and writes nothing; the stamping engine (#27) and the
+ * registration-PR opener (#28) are the sibling slices that act on it. The
+ * remaining verbs are scaffold stubs (#212) — they recognize the surface and
+ * exit non-zero so the bin is wired but honest about being empty. They land
+ * in #219-#221.
  */
 
 import type { ForgeCommand } from './index.js';
 import { version } from './index.js';
 import { forgeRun } from './run.js';
 import { forgeReview } from './review.js';
+import { parseNewArgs, resolveStampPlan, formatStampPlan } from './new.js';
 
 const KNOWN: readonly ForgeCommand[] = [
   'run',
@@ -26,7 +30,6 @@ const KNOWN: readonly ForgeCommand[] = [
 ];
 
 const STUBBED: readonly ForgeCommand[] = [
-  'new',
   'validate',
   'doctor',
   'upgrade',
@@ -66,6 +69,12 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(
       `forge review: ${outcome.pushedCommits} commit(s) pushed to ${outcome.branch}.\n`
     );
+    return 0;
+  }
+
+  if (cmd === 'new') {
+    const plan = await resolveStampPlan(parseNewArgs(argv.slice(1)));
+    process.stdout.write(`${formatStampPlan(plan)}\n`);
     return 0;
   }
 
