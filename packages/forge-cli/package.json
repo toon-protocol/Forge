@@ -12,7 +12,8 @@
   "files": ["dist"],
   "dependencies": {
     "@ai-hero/sandcastle": "0.12.0",
-    "@toon-protocol/forge-core": "workspace:*"
+    "@toon-protocol/forge-core": "workspace:*",
+    "smol-toml": "^1.7.0"
   },
   "scripts": {
     "build": "tsc -b",

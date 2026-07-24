@@ -56,6 +56,44 @@ describe('templates/dockerfiles — inventory (four proven/prepared shapes)', ()
   });
 });
 
+describe('templates/sandcastle/ — .sandcastle/ prompt bundle (toon-protocol/Forge#27)', () => {
+  it('ships exactly the six bundle files', () => {
+    const files = readdirSync(`${repoRoot}templates/sandcastle`).sort();
+    expect(files).toEqual(
+      [
+        'plan-prompt.md',
+        'implement-prompt.md',
+        'review-prompt.md',
+        'CODING_STANDARDS.md',
+        '.env.example',
+        '.gitignore',
+      ].sort()
+    );
+  });
+
+  it('leaves sandcastle runtime tokens untouched but carries stamp-time placeholders', () => {
+    const implement = readTemplate('templates/sandcastle/implement-prompt.md');
+    expect(implement).toContain('{{TASK_ID}}');
+    expect(implement).toContain('{{ISSUE_TITLE}}');
+    expect(implement).toContain('{{BRANCH}}');
+    expect(implement).toContain('__GATE_COMMANDS__');
+    expect(implement).toContain('__CONTEXT_CEILING_PCT__');
+
+    const review = readTemplate('templates/sandcastle/review-prompt.md');
+    expect(review).toContain('{{TARGET_BRANCH}}');
+    expect(review).toContain('__GATE_COMMANDS__');
+    expect(review).toContain('__CONTEXT_CEILING_PCT__');
+  });
+
+  it('does not hardcode Forge-specific gate commands (generalized for any stamped factory)', () => {
+    for (const file of ['implement-prompt.md', 'review-prompt.md']) {
+      const contents = readTemplate(`templates/sandcastle/${file}`);
+      expect(contents).not.toMatch(/pnpm run typecheck/);
+      expect(contents).not.toMatch(/Forge's (real )?gate/);
+    }
+  });
+});
+
 describe('gate.yml — Rule-4 diff-path separation (ARCHITECTURE.md §3 rule 4)', () => {
   const gate = readTemplate('templates/workflows/gate.yml');
 

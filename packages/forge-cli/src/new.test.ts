@@ -30,6 +30,7 @@ describe('parseNewArgs', () => {
       node: '22',
       lockfile: 'pnpm-lock.yaml',
       devbox: true,
+      dryRun: false,
     });
   });
 
@@ -39,6 +40,17 @@ describe('parseNewArgs', () => {
     expect(args.archetype).toBeUndefined();
     expect(args.dir).toBe('.');
     expect(args.devbox).toBe(false);
+    expect(args.dryRun).toBe(false);
+  });
+
+  it('parses --dry-run', () => {
+    const args = parseNewArgs([
+      '--blank',
+      '--repo',
+      'toon-protocol/lib',
+      '--dry-run',
+    ]);
+    expect(args.dryRun).toBe(true);
   });
 
   it('rejects --blank combined with an archetype positional', () => {
