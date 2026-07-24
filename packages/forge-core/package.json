@@ -1,7 +1,7 @@
 {
   "name": "@toon-protocol/forge-core",
   "version": "0.0.0",
-  "description": "Manifest loader + inner-gate injection + per-role model tiering wrapping @ai-hero/sandcastle, composing the full label→plan→implement→inner-gates→review→PR cycle (runCycle). Driving it from a real Actions run is not yet implemented — see Forge#8.",
+  "description": "Manifest loader + inner-gate injection + per-role model tiering wrapping @ai-hero/sandcastle, composing the full label→plan→implement→inner-gates→review→PR cycle (runCycle) and its concrete sandcastle-backed phase runners (createSandcastleRunners). Driving it from a real Actions run is Forge#24.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
