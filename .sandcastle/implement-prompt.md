@@ -41,8 +41,9 @@ Forge is a pnpm workspace. Before committing, run Forge's real gate and make sur
 - typecheck: `pnpm run typecheck`
 - test: `vitest run`
 - build: `pnpm -r run build`
+- format: `pnpm format:check`
 
-Do not commit until lint, typecheck, test, and build all pass.
+Do not commit until lint, typecheck, test, build, and format all pass.
 
 # COMMIT
 

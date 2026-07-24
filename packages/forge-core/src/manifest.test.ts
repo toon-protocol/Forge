@@ -1,12 +1,15 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   loadManifest,
   ManifestValidationError,
   parseManifest,
 } from './manifest.js';
+
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 // The worked example from FACTORY_SPEC.md §9 (Forge's own self-host manifest).
 const VALID_MANIFEST = `
@@ -217,5 +220,19 @@ describe('loadManifest', () => {
     const manifest = await loadManifest(path);
 
     expect(manifest.factory.name).toBe('forge');
+  });
+
+  it("Forge's own repo-root factory.toml validates and gates on format:check (#40)", async () => {
+    const manifest = await loadManifest(join(repoRoot, 'factory.toml'));
+
+    const formatTier = manifest.oracleTiers.find(
+      (tier) => tier.run === 'pnpm format:check'
+    );
+    expect(formatTier).toBeDefined();
+    expect(formatTier?.surfaces).toEqual(
+      expect.arrayContaining(['inner', 'pr'])
+    );
+    expect(formatTier?.cost).toBe('cheap');
+    expect(manifest.loop.innerGates).toContain(formatTier?.id);
   });
 });
