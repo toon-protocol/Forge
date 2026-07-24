@@ -25,7 +25,7 @@ lockfile = "pnpm-lock.yaml"
 template = "parallel-planner-with-review"
 # Cheap tiers that fire between implement iterations (advisory; the PR-surface
 # tiers below are the authoritative backstop).
-inner_gates = ["t0-lint", "t1-typecheck"]
+inner_gates = ["t0-lint", "t1-typecheck", "t4-format"]
 
 [loop.models]
 # Per-role tiering (toon-meta#202), mirrored from FACTORY.md's model policy.
@@ -63,3 +63,10 @@ run = "pnpm build"
 on = ["**/*.ts"]
 surfaces = ["pr"]
 cost = "moderate"
+
+[[oracle.tier]]
+id = "t4-format"
+run = "pnpm format:check"
+on = ["**/*.ts"]
+surfaces = ["inner", "pr"]
+cost = "cheap"
