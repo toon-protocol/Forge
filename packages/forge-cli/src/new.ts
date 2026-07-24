@@ -205,8 +205,9 @@ export async function resolveStampPlan(
     }
     kind = args.kind;
   } else {
-    const fetchCatalog = deps.fetchArchetypeCatalog ?? fetchArchetypeCatalog;
-    const catalog = await fetchCatalog();
+    const fetchArchetypeCatalogFn =
+      deps.fetchArchetypeCatalog ?? fetchArchetypeCatalog;
+    const catalog = await fetchArchetypeCatalogFn();
     const entry = catalog.find((e) => e.name === args.archetype);
     if (!entry || !entry.minted) {
       const minted = catalog
