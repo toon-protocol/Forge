@@ -132,6 +132,9 @@ async function main(argv: readonly string[]): Promise<number> {
 
   if (cmd === 'upgrade') {
     const result = await forgeUpgrade();
+    for (const warning of result.warnings) {
+      process.stdout.write(`forge upgrade: warning: ${warning}\n`);
+    }
     if (!result.changed) {
       process.stdout.write(
         `forge upgrade: "${result.manifest.factory.name}" is already up to date with current templates — no PR opened.\n`

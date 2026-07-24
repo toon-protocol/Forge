@@ -198,6 +198,29 @@ describe('forgeUpgrade — post-stamp validation failure', () => {
   });
 });
 
+describe('forgeUpgrade — post-stamp validation warnings', () => {
+  it('surfaces non-failing warnings from the post-stamp self-check on a no-diff regen', async () => {
+    const { targetDir } = await initStampedRepo();
+    const gh = ghStub([], []);
+
+    const result = await forgeUpgrade({
+      targetDir,
+      gh,
+      validateStampedOutput: async (plan) => ({
+        manifest: (await stamp(plan)).manifest,
+        warnings: [
+          'model divergence: [loop.models].planner diverges from org policy',
+        ],
+      }),
+    });
+
+    expect(result.changed).toBe(false);
+    expect(result.warnings).toEqual([
+      'model divergence: [loop.models].planner diverges from org policy',
+    ]);
+  });
+});
+
 describe('branchForUpgrade / PR title / PR body', () => {
   it('names a deterministic per-factory upgrade branch', () => {
     expect(branchForUpgrade('widget')).toBe('forge-upgrade/widget');

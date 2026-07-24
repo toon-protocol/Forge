@@ -195,6 +195,8 @@ export interface UpgradeResult {
   readonly changed: boolean;
   /** The changed subset of the stamped files, relative to `targetDir`. */
   readonly files: readonly string[];
+  /** Non-failing surfaces from the post-stamp self-check: archetype drift (§2.1) + model divergence (§5.1), same as `forge new`'s. */
+  readonly warnings: readonly string[];
   /** A new PR was opened by this call (vs. an already-open one being reused). Only set when `changed`. */
   readonly opened?: boolean;
   readonly pr?: { readonly number: number; readonly url: string };
@@ -232,11 +234,16 @@ export async function forgeUpgrade(
   // Never open a PR onto a regen the manifest validator itself would reject
   // (FACTORY_SPEC.md §8) — a stamping-engine regression must surface as a
   // thrown error here, not as a red gate on an opened PR.
-  await validateStampedOutputFn(plan, { templatesRoot });
+  const validation = await validateStampedOutputFn(plan, { templatesRoot });
 
   const files = git.changedFiles(stampResult.files);
   if (files.length === 0) {
-    return { manifest: stampResult.manifest, changed: false, files: [] };
+    return {
+      manifest: stampResult.manifest,
+      changed: false,
+      files: [],
+      warnings: validation.warnings,
+    };
   }
 
   const branch = branchNameFn(stampResult.manifest.factory.name);
@@ -247,6 +254,7 @@ export async function forgeUpgrade(
       manifest: stampResult.manifest,
       changed: true,
       files,
+      warnings: validation.warnings,
       opened: false,
       pr: openPr,
     };
@@ -276,6 +284,7 @@ export async function forgeUpgrade(
     manifest: stampResult.manifest,
     changed: true,
     files,
+    warnings: validation.warnings,
     opened: true,
     pr,
   };
