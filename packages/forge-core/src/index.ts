@@ -2,9 +2,10 @@
  * @toon-protocol/forge-core — factory engine.
  *
  * Wraps `@ai-hero/sandcastle` with a manifest loader (`factory.toml` per
- * FACTORY_SPEC.md, #213), inner-gate injection (#215), and full
- * label→plan→implement→inner-gates→review→PR orchestration (#216, not yet
- * implemented here — see Forge#8).
+ * FACTORY_SPEC.md, #213), inner-gate injection (#215), and the
+ * plan→implement(+inner-gates) cycle (#22). The remaining
+ * review→PR half of the full label→plan→implement→inner-gates→review→PR
+ * orchestration is not yet implemented here — see Forge#8.
  */
 
 export {
@@ -48,6 +49,16 @@ export {
   driveImplementWithInnerGates,
   runPreReviewGate,
 } from './loop.js';
+
+export {
+  type LabeledIssueRef,
+  type ImplementDispatch,
+  type PlanRunner,
+  type ImplementRunner,
+  type PlanImplementCycleOptions,
+  type PlanImplementCycleReport,
+  runPlanImplementCycle,
+} from './cycle.js';
 
 /** forge-core semantic version, surfaced for `forge doctor`/`status`. */
 export const FORGE_CORE_VERSION = '0.0.0';
