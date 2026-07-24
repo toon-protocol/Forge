@@ -48,3 +48,14 @@ for the game archetype pilot but unproven until that pilot's first `agent:implem
 `check-rule4.mjs` — the Rule-4 diff-path separation check (ARCHITECTURE.md §3 rule 4): a script,
 not an agent judgment, per the determinism doctrine. Exports a pure `classify()` so its logic is
 unit-testable without shelling out to `git`.
+
+## `templates/archetypes/`
+
+Archetype bundles — opinions above the bare `[environment] kind`, named for **what you build**
+(ARCHITECTURE.md §8). Not (yet) part of the stamped-destination table above: `forge new`/`forge
+validate` (#218/#219) are what will actually consume these; until then they are reference
+material plus structural test coverage.
+
+- `game/` — Bevy client + SpacetimeDB server on the pinned stack. **Mint-after-pilot**
+  (`game/archetype.toml`: `minted = false`) — prepared, not declared minted, per ARCHITECTURE.md
+  §8's "an archetype exists only after its pilot" rule. See `game/README.md`.

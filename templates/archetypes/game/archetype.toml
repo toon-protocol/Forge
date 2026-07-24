@@ -1,0 +1,30 @@
+# Archetype provenance record for `game` (Bevy client + SpacetimeDB on the
+# pinned stack). Shape mirrors what FACTORY_SPEC.md §2.1 expects a minted
+# catalog entry to carry, so promoting this bundle to "minted" is a status
+# flip in toon-meta/FACTORY.md, not a reshape of this file.
+#
+# MINT-AFTER-PILOT (ARCHITECTURE.md §8, toon-meta#198): this archetype does
+# not exist until a game repo runs `factory.toml.example` (this directory)
+# end to end via >=1 merged `agent:implement` PR. Until then:
+#   - `minted = false`, `proving_repo = ""`
+#   - no repo may set its own `factory.toml`'s `[factory].archetype = "game"`
+#     and expect `forge validate` to accept it (FACTORY_SPEC.md §8 rule 4)
+#   - this file does NOT register `game` in `toon-meta/FACTORY.md` — that
+#     registration is toon-protocol/Forge#16's toon-meta-side scope, not
+#     this diff's
+
+[archetype]
+name             = "game"
+status           = "mint-after-pilot"
+minted           = false
+proving_repo     = ""
+environment      = "bevy-spacetime"
+doctrine         = "DOCTRINE.md"
+manifest_example = "factory.toml.example"
+oracle_tiers     = [
+  "t0-fmt-lint",
+  "t1-build",
+  "t2-unit-test",
+  "t3-sim-replay-golden",
+  "t4-visual-parity",
+]
