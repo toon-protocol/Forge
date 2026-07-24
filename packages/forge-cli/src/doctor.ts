@@ -92,8 +92,11 @@ export function formatDoctorReport(report: DoctorReport): string {
     if (r.status === 'skipped') {
       return `  skip  ${r.tierId}  (${r.command}) — no matching paths`;
     }
-    const verdict = r.status === 'passed' ? 'green' : 'RED ';
-    const output = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+    // Padded to line up with 'skip' below, which also precedes the tier id by two spaces.
+    const verdict = (r.status === 'passed' ? 'green' : 'RED').padEnd(5);
+    const output = [r.stdout, r.stderr]
+      .filter((s) => s !== undefined && s.length > 0)
+      .join('\n');
     const outputSuffix =
       r.status === 'failed' && output.length > 0 ? `\n${output}` : '';
     return `  ${verdict} ${r.tierId}  (${r.command}) — exit ${r.exitCode}${outputSuffix}`;

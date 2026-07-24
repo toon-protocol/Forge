@@ -39,15 +39,17 @@ const COST_ORDER: Readonly<Record<TierCost, number>> = {
 };
 
 function escapeRegExpLiteral(str: string): string {
-  return str.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  return str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Converts a single glob segment's `*` wildcards into `[^/]*`, escaping everything else. */
+function segmentToRegExpSource(segment: string): string {
+  return segment.split('*').map(escapeRegExpLiteral).join('[^/]*');
 }
 
 /** Converts a path glob (`*`/`**`) into an anchored RegExp. */
 export function globToRegExp(glob: string): RegExp {
-  const pattern = glob
-    .split('**')
-    .map((segment) => segment.split('*').map(escapeRegExpLiteral).join('[^/]*'))
-    .join('.*');
+  const pattern = glob.split('**').map(segmentToRegExpSource).join('.*');
   return new RegExp(`^${pattern}$`);
 }
 
