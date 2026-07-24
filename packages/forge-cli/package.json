@@ -1,7 +1,7 @@
 {
   "name": "@toon-protocol/forge-cli",
   "version": "0.0.0",
-  "description": "forge new | validate | doctor | upgrade | status. Stub — see #218-#221.",
+  "description": "forge new | validate | doctor implemented. upgrade | status remain stubs — see #221.",
   "license": "MIT",
   "type": "module",
   "bin": {

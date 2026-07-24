@@ -45,6 +45,16 @@ export {
 } from './models.js';
 
 export {
+  type Execer as PrGateExecer,
+  type PrGateReport,
+  type PrGateTierResult,
+  globToRegExp,
+  isArmed,
+  runPrGateLadder,
+  selectPrGateTiers,
+} from './pr-gate.js';
+
+export {
   type Iteration,
   type InnerGateLoopOptions,
   type InnerGateLoopReport,

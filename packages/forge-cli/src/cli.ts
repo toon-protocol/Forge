@@ -12,9 +12,13 @@
  * PR (#28); `--dry-run` prints the resolved plan instead of
  * writing/validating/registering anything. `validate` (#11) lints
  * `factory.toml` and checks it against the org registry, both directions
- * (registered + pin parity). The remaining verbs are scaffold stubs (#212)
- * — they recognize the surface and exit non-zero so the bin is wired but
- * honest about being empty. They land in #220-#221.
+ * (registered + pin parity). `doctor` (#12) runs the manifest's full
+ * `pr`-surfaced tier ladder against HEAD — cost-ordered, path-filtered — and
+ * exits non-zero on red, mechanizing the green-baseline law
+ * (toon-meta#178): a gate is wired only once doctor is green. The remaining
+ * verbs are scaffold stubs (#212) — they recognize the surface and exit
+ * non-zero so the bin is wired but honest about being empty. They land in
+ * #221.
  */
 
 import type { ForgeCommand } from './index.js';
@@ -26,6 +30,7 @@ import { stamp } from './stamp.js';
 import { validateStampedOutput } from './validate-stamp.js';
 import { forgeValidate } from './validate.js';
 import { registerFactory } from './register.js';
+import { formatDoctorReport, forgeDoctor } from './doctor.js';
 
 const KNOWN: readonly ForgeCommand[] = [
   'run',
@@ -37,7 +42,7 @@ const KNOWN: readonly ForgeCommand[] = [
   'status',
 ];
 
-const STUBBED: readonly ForgeCommand[] = ['doctor', 'upgrade', 'status'];
+const STUBBED: readonly ForgeCommand[] = ['upgrade', 'status'];
 
 async function main(argv: readonly string[]): Promise<number> {
   const [cmd] = argv;
@@ -114,6 +119,12 @@ async function main(argv: readonly string[]): Promise<number> {
       `forge validate: "${result.manifest.factory.name}" is valid.\n`
     );
     return 0;
+  }
+
+  if (cmd === 'doctor') {
+    const report = await forgeDoctor();
+    process.stdout.write(`${formatDoctorReport(report)}\n`);
+    return report.passed ? 0 : 1;
   }
 
   if (cmd !== undefined && (STUBBED as readonly string[]).includes(cmd)) {
