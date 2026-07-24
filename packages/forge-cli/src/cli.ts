@@ -10,9 +10,11 @@
  * emitted `factory.toml` (#29 — fails the command on any FACTORY_SPEC.md §8
  * violation), then opens (or reuses) the `toon-meta/FACTORY.md` registration
  * PR (#28); `--dry-run` prints the resolved plan instead of
- * writing/validating/registering anything. The remaining verbs are scaffold
- * stubs (#212) — they recognize the surface and exit non-zero so the bin is
- * wired but honest about being empty. They land in #219-#221.
+ * writing/validating/registering anything. `validate` (#11) lints
+ * `factory.toml` and checks it against the org registry, both directions
+ * (registered + pin parity). The remaining verbs are scaffold stubs (#212)
+ * — they recognize the surface and exit non-zero so the bin is wired but
+ * honest about being empty. They land in #220-#221.
  */
 
 import type { ForgeCommand } from './index.js';
@@ -22,6 +24,7 @@ import { forgeReview } from './review.js';
 import { parseNewArgs, resolveStampPlan, formatStampPlan } from './new.js';
 import { stamp } from './stamp.js';
 import { validateStampedOutput } from './validate-stamp.js';
+import { forgeValidate } from './validate.js';
 import { registerFactory } from './register.js';
 
 const KNOWN: readonly ForgeCommand[] = [
@@ -34,12 +37,7 @@ const KNOWN: readonly ForgeCommand[] = [
   'status',
 ];
 
-const STUBBED: readonly ForgeCommand[] = [
-  'validate',
-  'doctor',
-  'upgrade',
-  'status',
-];
+const STUBBED: readonly ForgeCommand[] = ['doctor', 'upgrade', 'status'];
 
 async function main(argv: readonly string[]): Promise<number> {
   const [cmd] = argv;
@@ -104,6 +102,17 @@ async function main(argv: readonly string[]): Promise<number> {
         `forge new: registration PR ${registration.opened ? 'opened' : 'already open'} — #${registration.pr.number} ${registration.pr.url}\n`
       );
     }
+    return 0;
+  }
+
+  if (cmd === 'validate') {
+    const result = await forgeValidate();
+    for (const warning of result.warnings) {
+      process.stdout.write(`forge validate: warning: ${warning}\n`);
+    }
+    process.stdout.write(
+      `forge validate: "${result.manifest.factory.name}" is valid.\n`
+    );
     return 0;
   }
 
