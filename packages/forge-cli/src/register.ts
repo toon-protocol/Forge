@@ -26,6 +26,7 @@ import type {
   OracleTier,
 } from '@toon-protocol/forge-core';
 import type { PullRequestRef } from '@toon-protocol/forge-core';
+import { splitTableRowCells } from './markdown-table.js';
 
 /** `toon-meta` is the org's single source of truth for the factory registry (FACTORY_SPEC.md §8.2). */
 const REGISTRY_REPO = 'toon-protocol/toon-meta';
@@ -93,12 +94,7 @@ function sectionBounds(lines: readonly string[]): {
 }
 
 function firstCell(line: string): string | undefined {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('|')) return undefined;
-  const cells = trimmed
-    .slice(1, trimmed.endsWith('|') ? -1 : undefined)
-    .split('|');
-  return cells[0]?.trim();
+  return splitTableRowCells(line)?.[0];
 }
 
 function lastTableRowIndex(
