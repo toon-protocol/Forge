@@ -1,0 +1,79 @@
+# gate — the outer, authoritative gate (ARCHITECTURE.md §4, Rule 3). Runs on
+# every PR ref and on push to main; branch protection makes this the check of
+# record. The in-loop `sandbox.exec()` gates forge-core runs during implement
+# are advisory feedback only — this workflow is the verdict.
+#
+# rule-4 job — the diff-path separation check (ARCHITECTURE.md §3 rule 4): no
+# PR may touch this factory's oracle-protected paths (gate scripts / verify/)
+# and the system-under-test in the same diff. It is a script's exit code, not
+# an agent judgment (determinism doctrine, Rule 1) — see
+# scripts/check-rule4.mjs (stamped from templates/scripts/check-rule4.mjs).
+#
+# tiers job — the proven node-pnpm tier ladder (lint/typecheck/test/build/
+# format), extracted from the relay-proven pattern. Once forge-core
+# (toon-protocol/Forge#7/#8) ships, this job resolves to running each
+# factory.toml `[[oracle.tier]]` entry whose `surfaces` include "pr",
+# cost-ordered and path-filtered by `on` (FACTORY_SPEC.md §4); until then a
+# stamped repo lists its concrete tier commands here, same as this template
+# does.
+
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  rule-4:
+    name: Rule-4 diff-path separation
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the base...head diff resolves
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # RULE4_PROTECTED_PATHS overrides the default `verify/**` zone — set it
+      # as a repo/environment variable if this factory's oracle code lives
+      # elsewhere. Forge itself is double-protected (verify/** AND
+      # templates/**, since templates/** is oracle code for downstream
+      # factories — ARCHITECTURE.md §7) and sets it accordingly.
+      - name: Check oracle / system-under-test separation
+        env:
+          RULE4_PROTECTED_PATHS: ${{ vars.RULE4_PROTECTED_PATHS }}
+        run: node scripts/check-rule4.mjs "origin/${{ github.base_ref }}" HEAD
+
+  tiers:
+    name: Tier ladder
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: lint
+        run: pnpm lint
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: test
+        run: pnpm test
+
+      - name: build
+        run: pnpm build
+
+      - name: format
+        run: pnpm format:check

@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+// Rule-4 diff-path separation check (ARCHITECTURE.md §3 rule 4).
+//
+// "No PR touches gate scripts/verify/ and the system-under-test in the same
+// diff." This is a script, not an agent judgment — the determinism doctrine
+// (Rule 1): if an exit code can decide it, it is never inferred.
+//
+// A stamped repo's gate.yml (templates/workflows/gate.yml) calls this against
+// the PR's diff. Exit 0 = no violation, exit 1 = violation, exit 2 = usage
+// error.
+//
+// Usage: node check-rule4.mjs <base-ref> [head-ref]
+// Env:   RULE4_PROTECTED_PATHS — newline- or comma-separated glob list naming
+//        this factory's oracle-protected zone. Defaults to "verify/**". A
+//        double-protected repo (like Forge itself, which also ships
+//        templates/** as oracle code for downstream factories) overrides this
+//        with a repo/environment variable, e.g. "verify/**,templates/**".
+
+import { execFileSync } from 'node:child_process';
+
+export const DEFAULT_PROTECTED_PATHS = ['verify/**'];
+
+function escapeRegExpLiteral(str) {
+  return str.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Converts a glob (supporting `*` and `**`) into an anchored RegExp. */
+export function globToRegExp(glob) {
+  const pattern = glob
+    .split('**')
+    .map((segment) =>
+      segment.split('*').map(escapeRegExpLiteral).join('[^/]*')
+    )
+    .join('.*');
+  return new RegExp(`^${pattern}$`);
+}
+
+function matchesAny(path, regexps) {
+  return regexps.some((re) => re.test(path));
+}
+
+/**
+ * Splits changed file paths into oracle-protected paths and everything else
+ * (the system-under-test). A Rule-4 violation is when both are non-empty.
+ */
+export function classify(files, protectedGlobs = DEFAULT_PROTECTED_PATHS) {
+  const regexps = protectedGlobs.map(globToRegExp);
+  const protectedFiles = files.filter((f) => matchesAny(f, regexps));
+  const sutFiles = files.filter((f) => !matchesAny(f, regexps));
+  return { protectedFiles, sutFiles };
+}
+
+export function parseProtectedPaths(raw) {
+  if (!raw || raw.trim() === '') {
+    return DEFAULT_PROTECTED_PATHS;
+  }
+  return raw
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function changedFiles(base, head) {
+  const output = execFileSync(
+    'git',
+    ['diff', '--name-only', `${base}...${head}`],
+    { encoding: 'utf8' }
+  );
+  return output
+    .split('\n')
+    .map((f) => f.trim())
+    .filter(Boolean);
+}
+
+function main() {
+  const [base, head = 'HEAD'] = process.argv.slice(2);
+  if (!base) {
+    console.error('usage: check-rule4.mjs <base-ref> [head-ref]');
+    return 2;
+  }
+
+  const protectedGlobs = parseProtectedPaths(process.env.RULE4_PROTECTED_PATHS);
+  const files = changedFiles(base, head);
+  const { protectedFiles, sutFiles } = classify(files, protectedGlobs);
+
+  if (protectedFiles.length > 0 && sutFiles.length > 0) {
+    console.error(
+      'Rule-4 violation: this diff touches both oracle-protected paths and the system-under-test.'
+    );
+    console.error(`Protected paths matched (${protectedGlobs.join(', ')}):`);
+    for (const f of protectedFiles) console.error(`  ${f}`);
+    console.error('System-under-test paths:');
+    for (const f of sutFiles) console.error(`  ${f}`);
+    console.error(
+      'Split this into two PRs: one touching the oracle, one touching the code it judges.'
+    );
+    return 1;
+  }
+
+  console.log(
+    `Rule-4 OK: ${files.length} file(s) changed, ${protectedFiles.length} protected / ${sutFiles.length} SUT — no overlap.`
+  );
+  return 0;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  process.exit(main());
+}
