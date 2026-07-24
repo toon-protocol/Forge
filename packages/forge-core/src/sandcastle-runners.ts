@@ -21,10 +21,8 @@ import * as sandcastle from '@ai-hero/sandcastle';
 import type {
   AgentProvider,
   CreateSandboxOptions,
-  ExecResult,
   OutputObjectDefinition,
   Sandbox,
-  SandboxExecOptions,
   SandboxHooks,
   SandboxProvider,
   SandboxRunResult,
@@ -32,13 +30,9 @@ import type {
 import type { Iteration } from './loop.js';
 import type { Execer } from './inner-gates.js';
 import type {
-  ImplementDispatch,
   ImplementRunner,
-  LabeledIssueRef,
   PlanRunner,
   PrOpener,
-  PullRequestRef,
-  ReviewResult,
   ReviewRunner,
 } from './cycle.js';
 
@@ -307,10 +301,8 @@ export function createSandcastleRunners(
     return toIteration(result);
   };
 
-  const exec: Execer = async (
-    command: string,
-    options?: SandboxExecOptions
-  ): Promise<ExecResult> => requireSandbox().exec(command, options);
+  const exec: Execer = async (command, options) =>
+    requireSandbox().exec(command, options);
 
   const runReview: ReviewRunner = async (agent, branch) => {
     const result = await requireSandbox().run({
@@ -320,14 +312,10 @@ export function createSandcastleRunners(
       promptFile: reviewPromptFile,
       promptArgs: { BRANCH: branch },
     });
-    const review: ReviewResult = { commits: result.commits };
-    return review;
+    return { commits: result.commits };
   };
 
-  const openPr: PrOpener = async (
-    dispatch: ImplementDispatch,
-    issue: LabeledIssueRef
-  ): Promise<PullRequestRef> => {
+  const openPr: PrOpener = async (dispatch, issue) => {
     const push = await requireSandbox().exec(
       `git push -u origin ${dispatch.branch}`
     );
@@ -337,21 +325,23 @@ export function createSandcastleRunners(
       );
     }
 
-    const alreadyOpen = await gh.prList({
+    const [existingPr] = await gh.prList({
       branch: dispatch.branch,
       state: 'open',
     });
-    if (alreadyOpen.length === 0) {
-      await gh.prCreate({
-        base: baseBranch,
-        head: dispatch.branch,
-        title: issue.title,
-        body:
-          'Produced by the sandcastle `agent:implement` runner; awaiting human review.\n\n' +
-          `Closes #${issue.id}\n\n` +
-          '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
-      });
+    if (existingPr) {
+      return existingPr;
     }
+
+    await gh.prCreate({
+      base: baseBranch,
+      head: dispatch.branch,
+      title: issue.title,
+      body:
+        'Produced by the sandcastle `agent:implement` runner; awaiting human review.\n\n' +
+        `Closes #${issue.id}\n\n` +
+        '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
+    });
 
     const openPrs = await gh.prList({ branch: dispatch.branch, state: 'open' });
     const pr = openPrs[0];
