@@ -6,11 +6,13 @@
  * through forge-core's `runCycle`, and `review` runs the reviewer standalone
  * over one `agent:review` PR — both on the repo's `factory.toml`. `new`
  * resolves a `StampPlan` (#26), stamps it into `--dir` via the stamping
- * engine (#27), then opens (or reuses) the `toon-meta/FACTORY.md`
- * registration PR (#28); `--dry-run` prints the resolved plan instead of
- * writing/registering anything. The remaining verbs are scaffold stubs
- * (#212) — they recognize the surface and exit non-zero so the bin is wired
- * but honest about being empty. They land in #219-#221.
+ * engine (#27), runs a post-stamp manifest-validity self-check over the
+ * emitted `factory.toml` (#29 — fails the command on any FACTORY_SPEC.md §8
+ * violation), then opens (or reuses) the `toon-meta/FACTORY.md` registration
+ * PR (#28); `--dry-run` prints the resolved plan instead of
+ * writing/validating/registering anything. The remaining verbs are scaffold
+ * stubs (#212) — they recognize the surface and exit non-zero so the bin is
+ * wired but honest about being empty. They land in #219-#221.
  */
 
 import type { ForgeCommand } from './index.js';
@@ -19,6 +21,7 @@ import { forgeRun } from './run.js';
 import { forgeReview } from './review.js';
 import { parseNewArgs, resolveStampPlan, formatStampPlan } from './new.js';
 import { stamp } from './stamp.js';
+import { validateStampedOutput } from './validate-stamp.js';
 import { registerFactory } from './register.js';
 
 const KNOWN: readonly ForgeCommand[] = [
@@ -85,6 +88,11 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(
       `forge new: stamped ${result.files.length} file(s) into ${plan.targetDir}\n`
     );
+
+    const validation = await validateStampedOutput(plan);
+    for (const warning of validation.warnings) {
+      process.stdout.write(`forge new: warning: ${warning}\n`);
+    }
 
     const registration = await registerFactory(result.manifest);
     if (registration.alreadyRegistered) {
