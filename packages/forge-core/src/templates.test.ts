@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parse as parseToml } from 'smol-toml';
 import { describe, expect, it } from 'vitest';
 import {
   classify,
@@ -7,6 +8,7 @@ import {
   globToRegExp,
   parseProtectedPaths,
 } from '../../../templates/scripts/check-rule4.mjs';
+import { parseManifest } from './manifest.js';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -158,5 +160,98 @@ describe('check-rule4.mjs — classify() (pure, unit-testable per the determinis
     expect(re.test('verify/gate.ts')).toBe(true);
     expect(re.test('not-verify/gate.ts')).toBe(false);
     expect(re.test('verify')).toBe(false);
+  });
+});
+
+describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/Forge#31, #16)', () => {
+  it('ships exactly the four bundle files', () => {
+    const files = readdirSync(`${repoRoot}templates/archetypes/game`).sort();
+    expect(files).toEqual(
+      [
+        'archetype.toml',
+        'DOCTRINE.md',
+        'factory.toml.example',
+        'README.md',
+      ].sort()
+    );
+  });
+
+  it('archetype.toml records mint-after-pilot, not minted (ARCHITECTURE.md §8)', () => {
+    const parsed = parseToml(
+      readTemplate('templates/archetypes/game/archetype.toml')
+    ) as {
+      archetype: {
+        name: string;
+        status: string;
+        minted: boolean;
+        proving_repo: string;
+        environment: string;
+        doctrine: string;
+        manifest_example: string;
+        oracle_tiers: string[];
+      };
+    };
+    expect(parsed.archetype.name).toBe('game');
+    expect(parsed.archetype.status).toBe('mint-after-pilot');
+    expect(parsed.archetype.minted).toBe(false);
+    expect(parsed.archetype.proving_repo).toBe('');
+    expect(parsed.archetype.environment).toBe('bevy-spacetime');
+    expect(parsed.archetype.oracle_tiers).toEqual([
+      't0-fmt-lint',
+      't1-build',
+      't2-unit-test',
+      't3-sim-replay-golden',
+      't4-visual-parity',
+    ]);
+  });
+
+  it('every doc in the bundle says mint-after-pilot / not minted, never declares the archetype minted', () => {
+    for (const file of ['README.md', 'DOCTRINE.md', 'factory.toml.example']) {
+      const contents = readTemplate(`templates/archetypes/game/${file}`);
+      expect(contents.toLowerCase()).toContain('mint-after-pilot');
+    }
+  });
+
+  it('does not touch a FACTORY.md registry file (toon-meta-side scope stays out of this diff)', () => {
+    const files = readdirSync(`${repoRoot}templates/archetypes/game`);
+    expect(files).not.toContain('FACTORY.md');
+  });
+
+  it('factory.toml.example is a schema-valid manifest declaring archetype = "game" on bevy-spacetime (FACTORY_SPEC.md)', () => {
+    const manifest = parseManifest(
+      readTemplate('templates/archetypes/game/factory.toml.example')
+    );
+    expect(manifest.factory.archetype).toBe('game');
+    expect(manifest.environment.kind).toBe('bevy-spacetime');
+    expect(manifest.environment.node).toBeUndefined();
+    expect(manifest.oracleTiers.map((t) => t.id)).toEqual([
+      't0-fmt-lint',
+      't1-build',
+      't2-unit-test',
+      't3-sim-replay-golden',
+      't4-visual-parity',
+    ]);
+  });
+
+  it('a T4 rendering tier uses tolerance, not a hash/golden check, and never runs on the inner loop (FACTORY_SPEC.md §3, §4.1)', () => {
+    const manifest = parseManifest(
+      readTemplate('templates/archetypes/game/factory.toml.example')
+    );
+    const t4 = manifest.oracleTiers.find((t) => t.id === 't4-visual-parity');
+    expect(t4?.tolerance).toBe('ssim>=0.98');
+    expect(t4?.surfaces).not.toContain('inner');
+    expect(t4?.cost).toBe('expensive');
+  });
+
+  it('the protected T3 golden tier is backed by a golden-regen privileged operation (FACTORY_SPEC.md §6, §8.7)', () => {
+    const manifest = parseManifest(
+      readTemplate('templates/archetypes/game/factory.toml.example')
+    );
+    const t3 = manifest.oracleTiers.find(
+      (t) => t.id === 't3-sim-replay-golden'
+    );
+    expect(t3?.protected).toBe(true);
+    expect(manifest.privileged?.environment).toBe('oracle-owners');
+    expect(manifest.privileged?.operations).toContain('golden-regen');
   });
 });

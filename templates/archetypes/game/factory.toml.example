@@ -1,0 +1,78 @@
+# Worked example — a repo minting `[factory].archetype = "game"`.
+#
+# Illustrative only, per templates/README.md (inert text, not built/linted by
+# Forge's own gate). `game` is mint-after-pilot (see archetype.toml in this
+# directory): a real repo cannot set this until toon-meta/FACTORY.md records
+# a pilot (FACTORY_SPEC.md §8 rule 4). Shape matches FACTORY_SPEC.md §9's
+# worked example for Forge's own manifest, adapted to the bevy-spacetime
+# environment and a game-shaped T0-T4 oracle ladder.
+
+[factory]
+name        = "<pilot-repo>"
+repo        = "toon-protocol/<pilot-repo>"
+archetype   = "game"
+description = "Bevy client + SpacetimeDB server on the pinned game stack."
+
+[environment]
+kind     = "bevy-spacetime"
+lockfile = "Cargo.lock"
+
+[loop]
+template        = "parallel-planner-with-review"
+inner_gates     = ["t0-fmt-lint", "t1-build"]
+context_ceiling = 0.60
+[loop.models]
+planner     = "claude-opus-4-8"
+merger      = "claude-opus-4-8"
+implementer = "claude-sonnet-5"
+reviewer    = "claude-sonnet-5"
+
+# T0 — cheap, advisory in the inner loop, authoritative on the PR ref.
+[[oracle.tier]]
+id       = "t0-fmt-lint"
+run      = "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings"
+on       = ["**/*.rs"]
+surfaces = ["inner", "pr"]
+cost     = "cheap"
+
+# T1 — cheap, advisory in the inner loop, authoritative on the PR ref.
+[[oracle.tier]]
+id       = "t1-build"
+run      = "cargo check --workspace --all-targets"
+on       = ["**/*.rs", "Cargo.toml", "Cargo.lock"]
+surfaces = ["inner", "pr"]
+cost     = "cheap"
+
+# T2 — moderate: too slow for the inner loop, authoritative on the PR ref.
+[[oracle.tier]]
+id       = "t2-unit-test"
+run      = "cargo test --workspace"
+on       = ["**/*.rs"]
+surfaces = ["pr"]
+cost     = "moderate"
+
+# T3 — deterministic SpacetimeDB reducer/replay parity against a committed
+# golden trace. Oracle-protected (Rule 4): no PR may touch this runner and
+# the reducers it judges in the same diff. Regen only via golden-regen.yml.
+[[oracle.tier]]
+id        = "t3-sim-replay-golden"
+run       = "cargo run -p sim-replay --release -- --check-golden"
+on        = ["server/**", "shared/**"]
+surfaces  = ["pr"]
+cost      = "moderate"
+protected = true
+
+# T4 — GPU rendering is not bit-reproducible (FACTORY_SPEC.md §3), so visual
+# parity is a tolerance metric, never a hash, and runs nightly/dispatch only
+# because it is too expensive to gate every PR.
+[[oracle.tier]]
+id        = "t4-visual-parity"
+run       = "cargo run -p visual-parity --release"
+on        = []
+surfaces  = ["nightly", "dispatch"]
+cost      = "expensive"
+tolerance = "ssim>=0.98"
+
+[privileged]
+environment = "oracle-owners"
+operations  = ["golden-regen"]
