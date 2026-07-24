@@ -1,0 +1,65 @@
+# Forge's own factory manifest (FACTORY_SPEC.md).
+#
+# Hand-authored bootstrap manifest (Forge#24). Forge is the factory *manager*
+# that is also a factory *consumer*: it runs its own `.sandcastle`/forge-core
+# cycle like every other repo. This file encodes what the stage-0 runners
+# hard-coded (per-role models, the node-pnpm environment, the gate tiers) so
+# forge-core's `runCycle` can be driven from a manifest at runtime.
+#
+# At the self-host checkpoint (Forge#15), `forge new` regenerates this file and
+# must reach behavioral parity with this hand-rolled version — bootstrap
+# hand-writes, self-host re-stamps. Until then this is the source of truth.
+
+[factory]
+name = "Forge"
+repo = "toon-protocol/Forge"
+archetype = "blank"          # Forge takes no archetype opinions (FACTORY.md: libraries + Forge stay --blank)
+description = "The factory manager — a forge-core monorepo that is itself a factory consumer."
+
+[environment]
+kind = "node-pnpm"
+node = "22"
+lockfile = "pnpm-lock.yaml"
+
+[loop]
+template = "parallel-planner-with-review"
+# Cheap tiers that fire between implement iterations (advisory; the PR-surface
+# tiers below are the authoritative backstop).
+inner_gates = ["t0-lint", "t1-typecheck"]
+
+[loop.models]
+# Per-role tiering (toon-meta#202), mirrored from FACTORY.md's model policy.
+planner = "claude-opus-4-8"       # dependency-graph reasoning; once per cycle
+merger = "claude-opus-4-8"        # conflict resolution; once per cycle
+implementer = "claude-sonnet-5"   # mechanical, high-iteration — bulk of spend
+reviewer = "claude-sonnet-5"      # single-pass review against a fixed standard
+
+# Gate tiers. `inner`-surfaced tiers must also carry `pr` (advisory feedback
+# needs an authoritative backstop, §4.1) and must not be `expensive`.
+[[oracle.tier]]
+id = "t0-lint"
+run = "pnpm lint"
+on = ["**/*.ts"]
+surfaces = ["inner", "pr"]
+cost = "cheap"
+
+[[oracle.tier]]
+id = "t1-typecheck"
+run = "pnpm typecheck"
+on = ["**/*.ts"]
+surfaces = ["inner", "pr"]
+cost = "cheap"
+
+[[oracle.tier]]
+id = "t2-test"
+run = "pnpm test"
+on = ["**/*.ts"]
+surfaces = ["pr"]
+cost = "moderate"
+
+[[oracle.tier]]
+id = "t3-build"
+run = "pnpm build"
+on = ["**/*.ts"]
+surfaces = ["pr"]
+cost = "moderate"

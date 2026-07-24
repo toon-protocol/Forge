@@ -44,6 +44,9 @@ importers:
 
   packages/forge-cli:
     dependencies:
+      '@ai-hero/sandcastle':
+        specifier: 0.12.0
+        version: 0.12.0
       '@toon-protocol/forge-core':
         specifier: workspace:*
         version: link:../forge-core
