@@ -1,11 +1,13 @@
 /**
  * `forge new` — parse `forge new <archetype>` / `forge new --blank` (plus
- * `--repo`/`--dir`/environment flags) and resolve them into a single
- * validated in-memory `StampPlan` (FACTORY_SPEC.md §2-§3). This slice writes
- * no files and opens no PR — that's the sibling stamping-engine (#27) and
- * registration-PR-opener (#28) slices. The deliverable here is a resolved,
- * printable plan, built from `FactorySection`/`EnvironmentSection` so it
- * matches exactly what forge-core's manifest surface consumes downstream.
+ * `--repo`/`--dir`/environment/`--dry-run` flags) and resolve them into a
+ * single validated in-memory `StampPlan` (FACTORY_SPEC.md §2-§3). This
+ * module writes no files and opens no PR itself — `cli.ts` hands the
+ * resolved plan to the sibling stamping engine (`stamp.ts`, #27); opening
+ * the `FACTORY.md` registration PR is #28. The deliverable here is a
+ * resolved plan, built from `FactorySection`/`EnvironmentSection` so it
+ * matches exactly what forge-core's manifest surface consumes downstream —
+ * `--dry-run` prints it (`formatStampPlan`) instead of stamping.
  *
  * `parseNewArgs`/`resolveStampPlan` are pure/injectable (no `gh` call) so
  * they're unit-testable directly. `fetchArchetypeCatalog` is the one real
@@ -58,6 +60,7 @@ export interface ParsedNewArgs {
   readonly node?: string;
   readonly lockfile?: string;
   readonly devbox: boolean;
+  readonly dryRun: boolean;
 }
 
 const FLAGS_WITH_VALUES = [
@@ -76,6 +79,7 @@ export function parseNewArgs(argv: readonly string[]): ParsedNewArgs {
   const values: Record<string, string> = {};
   let blank = false;
   let devbox = false;
+  let dryRun = false;
   const positionals: string[] = [];
 
   const rest = [...argv];
@@ -88,6 +92,10 @@ export function parseNewArgs(argv: readonly string[]): ParsedNewArgs {
     }
     if (arg === '--devbox') {
       devbox = true;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      dryRun = true;
       continue;
     }
     if ((FLAGS_WITH_VALUES as readonly string[]).includes(arg)) {
@@ -141,6 +149,7 @@ export function parseNewArgs(argv: readonly string[]): ParsedNewArgs {
     node: values.node,
     lockfile: values.lockfile,
     devbox,
+    dryRun,
   };
 }
 

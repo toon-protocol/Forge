@@ -50,6 +50,9 @@ importers:
       '@toon-protocol/forge-core':
         specifier: workspace:*
         version: link:../forge-core
+      smol-toml:
+        specifier: ^1.7.0
+        version: 1.7.0
 
   packages/forge-core:
     dependencies:

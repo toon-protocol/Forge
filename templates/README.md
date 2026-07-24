@@ -13,6 +13,7 @@ exists (toon-protocol/Forge#10/#218) — by diffing its output against golden fi
 | `templates/workflows/*.yml` | `.github/workflows/*.yml` |
 | `templates/dockerfiles/<kind>/Dockerfile` | `.sandcastle/Dockerfile`, where `<kind>` matches `factory.toml`'s `[environment] kind` |
 | `templates/scripts/*.mjs` | `scripts/*.mjs` (repo root) |
+| `templates/sandcastle/*` | `.sandcastle/*` — prompt files/`CODING_STANDARDS.md`/`.env.example`/`.gitignore`, stamped by `packages/forge-cli`'s stamping engine (toon-protocol/Forge#27) |
 
 ## `templates/workflows/`
 
@@ -48,6 +49,19 @@ for the game archetype pilot but unproven until that pilot's first `agent:implem
 `check-rule4.mjs` — the Rule-4 diff-path separation check (ARCHITECTURE.md §3 rule 4): a script,
 not an agent judgment, per the determinism doctrine. Exports a pure `classify()` so its logic is
 unit-testable without shelling out to `git`.
+
+## `templates/sandcastle/`
+
+The `.sandcastle/` prompt bundle every stamped repo needs so `forge-core`'s
+`createSandcastleRunners` (toon-protocol/Forge#33) can drive it: `plan-prompt.md`,
+`implement-prompt.md`, `review-prompt.md` (sandcastle's own `{{TASK_ID}}`/`{{ISSUE_TITLE}}`/
+`{{BRANCH}}`/`{{TARGET_BRANCH}}` tokens are left untouched — those resolve at run time via
+`promptArgs`), plus `CODING_STANDARDS.md`, `.env.example`, and `.gitignore`. Generalized from this
+repo's own hand-rolled `.sandcastle/*` (toon-protocol/Forge#6): the stamping engine substitutes two
+stamp-time-only placeholders before writing `implement-prompt.md`/`review-prompt.md` —
+`__GATE_COMMANDS__` (a bullet list built from the manifest's `pr`-surfaced `[[oracle.tier]]`
+entries) and `__CONTEXT_CEILING_PCT__` (`[loop].context_ceiling` as a percentage) — so the prompts
+never hardcode Forge's own gate commands or org policy defaults.
 
 ## `templates/archetypes/`
 
