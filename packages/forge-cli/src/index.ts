@@ -7,7 +7,7 @@
  *   forge new <archetype>  — stamp a factory (#26, #27); registration-PR opener is #28
  *   forge validate         — manifest lint + registry parity, both directions (#11)
  *   forge doctor           — run the full PR-tier ladder against HEAD, cost-ordered + path-filtered — the green-baseline law (toon-meta#178) as a command (#220, Forge#12)
- *   forge upgrade          — regenerate stamped files from templates as a gated PR (#221, stub)
+ *   forge upgrade          — regenerate this repo's stamped files from current templates as a gated PR (#221, Forge#13)
  */
 
 import { FORGE_CORE_VERSION } from '@toon-protocol/forge-core';
