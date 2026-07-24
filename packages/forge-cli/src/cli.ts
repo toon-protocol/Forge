@@ -5,10 +5,10 @@
  * `run` and `review` are live (#24): `run` drives one `agent:implement` issue
  * through forge-core's `runCycle`, and `review` runs the reviewer standalone
  * over one `agent:review` PR — both on the repo's `factory.toml`. `new`
- * resolves a `StampPlan` (#26) and stamps it into `--dir` via the stamping
- * engine (#27); `--dry-run` prints the resolved plan instead of writing
- * anything. Opening the `FACTORY.md` registration PR is the sibling #28
- * slice, not yet wired in here. The remaining verbs are scaffold stubs
+ * resolves a `StampPlan` (#26), stamps it into `--dir` via the stamping
+ * engine (#27), then opens (or reuses) the `toon-meta/FACTORY.md`
+ * registration PR (#28); `--dry-run` prints the resolved plan instead of
+ * writing/registering anything. The remaining verbs are scaffold stubs
  * (#212) — they recognize the surface and exit non-zero so the bin is wired
  * but honest about being empty. They land in #219-#221.
  */
@@ -19,6 +19,7 @@ import { forgeRun } from './run.js';
 import { forgeReview } from './review.js';
 import { parseNewArgs, resolveStampPlan, formatStampPlan } from './new.js';
 import { stamp } from './stamp.js';
+import { registerFactory } from './register.js';
 
 const KNOWN: readonly ForgeCommand[] = [
   'run',
@@ -84,6 +85,17 @@ async function main(argv: readonly string[]): Promise<number> {
     process.stdout.write(
       `forge new: stamped ${result.files.length} file(s) into ${plan.targetDir}\n`
     );
+
+    const registration = await registerFactory(result.manifest);
+    if (registration.alreadyRegistered) {
+      process.stdout.write(
+        `forge new: "${plan.factory.name}" is already registered in toon-meta/FACTORY.md — no PR opened.\n`
+      );
+    } else if (registration.pr) {
+      process.stdout.write(
+        `forge new: registration PR ${registration.opened ? 'opened' : 'already open'} — #${registration.pr.number} ${registration.pr.url}\n`
+      );
+    }
     return 0;
   }
 
