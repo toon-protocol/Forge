@@ -21,7 +21,7 @@
  */
 import type { AgentProvider } from '@ai-hero/sandcastle';
 import type { FactoryManifest } from './manifest.js';
-import { resolveRoleAgents } from './models.js';
+import { resolveRoleAgent, resolveRoleAgents } from './models.js';
 import {
   driveImplementWithInnerGates,
   runPreReviewGate,
@@ -146,14 +146,13 @@ export async function runCycle(
   issue: LabeledIssueRef,
   options: RunCycleOptions
 ): Promise<RunCycleReport> {
-  const agents = resolveRoleAgents(options.manifest);
-
   const planImplement = await runPlanImplementCycle(issue, options);
 
   const preReviewGate = await runPreReviewGate(options.exec, options.manifest);
 
+  const reviewer = resolveRoleAgent(options.manifest, 'reviewer');
   const review = await options.runReview(
-    agents.reviewer,
+    reviewer,
     planImplement.dispatch.branch
   );
 
