@@ -33,7 +33,12 @@ export interface PostStampValidation {
   readonly warnings: readonly string[];
 }
 
-async function archetypeDriftWarnings(
+/**
+ * Exported so `validate.ts` (Forge#11 — `forge validate`, run against an
+ * already-registered repo's `factory.toml` rather than a just-stamped one)
+ * reuses the exact same drift computation instead of duplicating it.
+ */
+export async function archetypeDriftWarnings(
   manifest: FactoryManifest,
   archetype: string,
   templatesRoot: string
@@ -69,7 +74,8 @@ async function archetypeDriftWarnings(
   return warnings;
 }
 
-function modelDivergenceWarnings(manifest: FactoryManifest): string[] {
+/** Exported for the same reason as {@link archetypeDriftWarnings}. */
+export function modelDivergenceWarnings(manifest: FactoryManifest): string[] {
   const warnings: string[] = [];
   for (const role of ROLES) {
     const actual = manifest.loop.models[role];

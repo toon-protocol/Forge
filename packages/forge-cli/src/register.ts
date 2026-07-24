@@ -35,12 +35,22 @@ const REGISTRY_BASE_BRANCH = 'main';
 
 const SECTION_HEADING = '## Per-repo factory table';
 
-function escapeCell(value: string): string {
+/**
+ * Escapes `|` so a value is safe inside a markdown table cell. Exported so
+ * `validate.ts` can build the same escaped form the registered row's pin
+ * cells carry before comparing (§8.3 — registry parity).
+ */
+export function escapeCell(value: string): string {
   return value.replaceAll('|', '\\|');
 }
 
-/** Maps an environment kind to the `Pkg mgr` column's existing vocabulary (see toon-meta/FACTORY.md's table). */
-function pkgMgrLabel(kind: EnvironmentKind): string {
+/**
+ * Maps an environment kind to the `Pkg mgr` column's existing vocabulary
+ * (see toon-meta/FACTORY.md's table). Exported: `validate.ts` (Forge#11)
+ * recomputes this same value from the local manifest to check it against
+ * the registered row's pin (§8.3 — registry parity).
+ */
+export function pkgMgrLabel(kind: EnvironmentKind): string {
   switch (kind) {
     case 'node-pnpm':
       return 'pnpm';
@@ -54,8 +64,12 @@ function pkgMgrLabel(kind: EnvironmentKind): string {
   }
 }
 
-/** Joins the manifest's PR-surfaced oracle tiers' `run` commands — the `Gate` column's existing "lint / typecheck / test / build" shape. */
-function gateSummary(tiers: readonly OracleTier[]): string {
+/**
+ * Joins the manifest's PR-surfaced oracle tiers' `run` commands — the
+ * `Gate` column's existing "lint / typecheck / test / build" shape.
+ * Exported for the same reason as {@link pkgMgrLabel}.
+ */
+export function gateSummary(tiers: readonly OracleTier[]): string {
   return tiers
     .filter((t) => t.surfaces.includes('pr'))
     .map((t) => t.run)
@@ -120,6 +134,25 @@ export function isFactoryRegistered(markdown: string, name: string): boolean {
   const lines = markdown.split('\n');
   const { start, end } = sectionBounds(lines);
   return lines.slice(start, end).some((l) => firstCell(l) === name);
+}
+
+/**
+ * Returns the `## Per-repo factory table` row cells keyed by `name`, or
+ * `undefined` if no such row exists. Used by `validate.ts` (Forge#11) to
+ * check the registered row's pins (Pkg mgr / Template / Gate) against the
+ * local manifest — registry parity, §8.3.
+ */
+export function findFactoryRowCells(
+  markdown: string,
+  name: string
+): readonly string[] | undefined {
+  const lines = markdown.split('\n');
+  const { start, end } = sectionBounds(lines);
+  for (const line of lines.slice(start, end)) {
+    const cells = splitTableRowCells(line);
+    if (cells && cells[0] === name) return cells;
+  }
+  return undefined;
 }
 
 /** Inserts `row` immediately after the last existing row of the `## Per-repo factory table` section. Pure — returns the updated document text. */
