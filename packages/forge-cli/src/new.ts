@@ -22,6 +22,7 @@ import type {
   EnvironmentSection,
   FactorySection,
 } from '@toon-protocol/forge-core';
+import { splitTableRowCells } from './markdown-table.js';
 
 const ENVIRONMENT_KINDS: readonly EnvironmentKind[] = [
   'node-pnpm',
@@ -259,15 +260,11 @@ export function parseArchetypeCatalog(
   let inTable = false;
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('|')) {
+    const cells = splitTableRowCells(line);
+    if (!cells) {
       inTable = false;
       continue;
     }
-    const cells = trimmed
-      .slice(1, trimmed.endsWith('|') ? -1 : undefined)
-      .split('|')
-      .map((c) => c.trim());
 
     if (!inTable) {
       const header = cells.map((c) => c.toLowerCase());
