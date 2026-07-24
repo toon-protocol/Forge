@@ -164,6 +164,10 @@ describe('check-rule4.mjs — classify() (pure, unit-testable per the determinis
 });
 
 describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/Forge#31, #16)', () => {
+  const manifest = parseManifest(
+    readTemplate('templates/archetypes/game/factory.toml.example')
+  );
+
   it('ships exactly the four bundle files', () => {
     const files = readdirSync(`${repoRoot}templates/archetypes/game`).sort();
     expect(files).toEqual(
@@ -218,9 +222,6 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
   });
 
   it('factory.toml.example is a schema-valid manifest declaring archetype = "game" on bevy-spacetime (FACTORY_SPEC.md)', () => {
-    const manifest = parseManifest(
-      readTemplate('templates/archetypes/game/factory.toml.example')
-    );
     expect(manifest.factory.archetype).toBe('game');
     expect(manifest.environment.kind).toBe('bevy-spacetime');
     expect(manifest.environment.node).toBeUndefined();
@@ -234,9 +235,6 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
   });
 
   it('a T4 rendering tier uses tolerance, not a hash/golden check, and never runs on the inner loop (FACTORY_SPEC.md §3, §4.1)', () => {
-    const manifest = parseManifest(
-      readTemplate('templates/archetypes/game/factory.toml.example')
-    );
     const t4 = manifest.oracleTiers.find((t) => t.id === 't4-visual-parity');
     expect(t4?.tolerance).toBe('ssim>=0.98');
     expect(t4?.surfaces).not.toContain('inner');
@@ -244,9 +242,6 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
   });
 
   it('the protected T3 golden tier is backed by a golden-regen privileged operation (FACTORY_SPEC.md §6, §8.7)', () => {
-    const manifest = parseManifest(
-      readTemplate('templates/archetypes/game/factory.toml.example')
-    );
     const t3 = manifest.oracleTiers.find(
       (t) => t.id === 't3-sim-replay-golden'
     );
