@@ -1,15 +1,21 @@
 /**
- * Plan → implement (with inner-gates) cycle composition (FACTORY_SPEC.md
- * §5, Forge#22) — the first half of forge-core's full label→plan→implement
- * →inner-gates→review→PR run (Forge#8).
+ * Full label→plan→implement→inner-gates→review→PR cycle composition
+ * (FACTORY_SPEC.md §5, Forge#8): `runPlanImplementCycle` composes the first
+ * half (plan → implement + inner-gates, Forge#22); `runCycle` extends it
+ * with the second half (pre-review-gate → review → PR, Forge#23).
  *
  * Given a labeled issue and a loaded `FactoryManifest`, resolves the
- * planner/implementer agents via `resolveRoleAgents` (#202 per-role
+ * planner/implementer/reviewer agents via `resolveRoleAgents` (#202 per-role
  * tiering), runs the plan phase to produce an implement dispatch (task +
  * branch), starts the implement phase, and drives it through the existing
  * `driveImplementWithInnerGates` so the manifest's cheap inner-gate tiers
- * fire between iterations. `runPlan`/`runImplement` are injected the same
- * way `Iteration`/`Execer` are in loop.ts — a real sandcastle-backed
+ * fire between iterations. After implement returns, `runCycle` runs the
+ * same inner gates once more via `runPreReviewGate` (advisory — it never
+ * blocks review, Rule 3), runs the review phase on the reviewer model, and
+ * opens a PR from the implement branch (PR mode: open + stop, no
+ * auto-merge, matching `.sandcastle/agent-implement-issue.ts`).
+ * `runPlan`/`runImplement`/`runReview`/`openPr` are injected the same way
+ * `Iteration`/`Execer` are in loop.ts — a real sandcastle-backed
  * implementation in production, a stub in tests — so this composes existing
  * building blocks without depending on a concrete sandbox.
  */
@@ -18,6 +24,7 @@ import type { FactoryManifest } from './manifest.js';
 import { resolveRoleAgents } from './models.js';
 import {
   driveImplementWithInnerGates,
+  runPreReviewGate,
   type Iteration,
   type InnerGateLoopOptions,
 } from './loop.js';
@@ -91,4 +98,66 @@ export async function runPlanImplementCycle(
   );
 
   return { dispatch, final, gateReports };
+}
+
+/** The review phase's output: the reviewer's refinement commits (if any) on the implement branch. Mirrors `Iteration`'s `commits` shape. */
+export interface ReviewResult {
+  readonly commits: readonly { readonly sha: string }[];
+}
+
+/** Runs the review phase on the given (reviewer) agent, against the implement branch. Generalizes `.sandcastle/agent-review-pr.ts`. */
+export type ReviewRunner = (
+  agent: AgentProvider,
+  branch: string
+) => Promise<ReviewResult>;
+
+/** A reference to the PR opened by the PR phase. */
+export interface PullRequestRef {
+  readonly number: number;
+  readonly url: string;
+}
+
+/** Runs the PR phase: pushes the implement branch and opens a PR (PR mode — open + stop, no auto-merge). Generalizes the open-pr step of `.sandcastle/agent-implement-issue.ts`. */
+export type PrOpener = (
+  dispatch: ImplementDispatch,
+  issue: LabeledIssueRef
+) => Promise<PullRequestRef>;
+
+export interface RunCycleOptions extends PlanImplementCycleOptions {
+  readonly runReview: ReviewRunner;
+  readonly openPr: PrOpener;
+}
+
+export interface RunCycleReport extends PlanImplementCycleReport {
+  /** The inner gates run once more before review (FACTORY_SPEC.md §4.1) — advisory, never blocks review (Rule 3). */
+  readonly preReviewGate: InnerGateRunReport;
+  readonly review: ReviewResult;
+  readonly pr: PullRequestRef;
+}
+
+/**
+ * Composes the full plan → implement → inner-gates → pre-review-gate →
+ * review → PR cycle for one labeled issue: `runPlanImplementCycle` for the
+ * first half, then the manifest's inner gates once more via
+ * `runPreReviewGate`, the review phase on the manifest's reviewer model, and
+ * the PR phase (open + stop, no auto-merge).
+ */
+export async function runCycle(
+  issue: LabeledIssueRef,
+  options: RunCycleOptions
+): Promise<RunCycleReport> {
+  const agents = resolveRoleAgents(options.manifest);
+
+  const planImplement = await runPlanImplementCycle(issue, options);
+
+  const preReviewGate = await runPreReviewGate(options.exec, options.manifest);
+
+  const review = await options.runReview(
+    agents.reviewer,
+    planImplement.dispatch.branch
+  );
+
+  const pr = await options.openPr(planImplement.dispatch, issue);
+
+  return { ...planImplement, preReviewGate, review, pr };
 }
