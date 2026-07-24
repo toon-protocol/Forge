@@ -28,7 +28,7 @@ import { parseManifest } from '@toon-protocol/forge-core';
 import type { StampPlan } from './new.js';
 
 /** Per-role model tiering (toon-meta#202), the org policy default for every stamped factory. */
-const DEFAULT_MODELS: Readonly<Record<Role, string>> = {
+export const DEFAULT_MODELS: Readonly<Record<Role, string>> = {
   planner: 'claude-opus-4-8',
   merger: 'claude-opus-4-8',
   implementer: 'claude-sonnet-5',
@@ -143,7 +143,8 @@ export interface StampResult {
   readonly files: readonly string[];
 }
 
-function defaultTemplatesRoot(): string {
+/** Root of this repo's own `templates/` substrate — the default `StampDeps.templatesRoot`. */
+export function defaultTemplatesRoot(): string {
   return fileURLToPath(new URL('../../../templates/', import.meta.url));
 }
 
@@ -227,7 +228,7 @@ export function serializeManifest(manifest: FactoryManifest): string {
  * can't find: by the time a plan reaches the stamping engine, that check
  * already happened upstream.
  */
-async function loadArchetypeExample(
+export async function loadArchetypeExample(
   templatesRoot: string,
   archetype: string
 ): Promise<FactoryManifest> {
