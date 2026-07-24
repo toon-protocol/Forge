@@ -15,10 +15,12 @@
  * (registered + pin parity). `doctor` (#12) runs the manifest's full
  * `pr`-surfaced tier ladder against HEAD — cost-ordered, path-filtered — and
  * exits non-zero on red, mechanizing the green-baseline law
- * (toon-meta#178): a gate is wired only once doctor is green. The remaining
- * verbs are scaffold stubs (#212) — they recognize the surface and exit
- * non-zero so the bin is wired but honest about being empty. They land in
- * #221.
+ * (toon-meta#178): a gate is wired only once doctor is green. `upgrade`
+ * (#13) re-runs the stamping engine over this repo's own `factory.toml`
+ * against current templates and, on any diff, opens (or reuses) an ordinary
+ * PR through this repo's own gate. The remaining verb (`status`) is a
+ * scaffold stub (#212) — it recognizes the surface and exits non-zero so the
+ * bin is wired but honest about being empty.
  */
 
 import type { ForgeCommand } from './index.js';
@@ -31,6 +33,7 @@ import { validateStampedOutput } from './validate-stamp.js';
 import { forgeValidate } from './validate.js';
 import { registerFactory } from './register.js';
 import { formatDoctorReport, forgeDoctor } from './doctor.js';
+import { forgeUpgrade } from './upgrade.js';
 
 const KNOWN: readonly ForgeCommand[] = [
   'run',
@@ -42,7 +45,7 @@ const KNOWN: readonly ForgeCommand[] = [
   'status',
 ];
 
-const STUBBED: readonly ForgeCommand[] = ['upgrade', 'status'];
+const STUBBED: readonly ForgeCommand[] = ['status'];
 
 async function main(argv: readonly string[]): Promise<number> {
   const [cmd] = argv;
@@ -125,6 +128,25 @@ async function main(argv: readonly string[]): Promise<number> {
     const report = await forgeDoctor();
     process.stdout.write(`${formatDoctorReport(report)}\n`);
     return report.passed ? 0 : 1;
+  }
+
+  if (cmd === 'upgrade') {
+    const result = await forgeUpgrade();
+    if (!result.changed) {
+      process.stdout.write(
+        `forge upgrade: "${result.manifest.factory.name}" is already up to date with current templates — no PR opened.\n`
+      );
+      return 0;
+    }
+    process.stdout.write(
+      `forge upgrade: regenerated ${result.files.length} file(s): ${result.files.join(', ')}\n`
+    );
+    if (result.pr) {
+      process.stdout.write(
+        `forge upgrade: PR ${result.opened ? 'opened' : 'already open'} — #${result.pr.number} ${result.pr.url}\n`
+      );
+    }
+    return 0;
   }
 
   if (cmd !== undefined && (STUBBED as readonly string[]).includes(cmd)) {
