@@ -16,6 +16,25 @@ function readTemplate(relativePath: string): string {
   return readFileSync(`${repoRoot}${relativePath}`, 'utf8');
 }
 
+type ArchetypeToml = {
+  archetype: {
+    name: string;
+    environment: string;
+    doctrine: string;
+    manifest_example: string;
+    oracle_tiers: string[];
+    status?: unknown;
+    minted?: unknown;
+    proving_repo?: unknown;
+  };
+};
+
+function readArchetypeToml(name: string): ArchetypeToml {
+  return parseToml(
+    readTemplate(`templates/archetypes/${name}/archetype.toml`)
+  ) as ArchetypeToml;
+}
+
 describe('templates/workflows — inventory (toon-protocol/Forge#9)', () => {
   it('ships exactly the five required workflow templates', () => {
     const files = readdirSync(`${repoRoot}templates/workflows`).sort();
@@ -219,20 +238,7 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
   });
 
   it('archetype.toml carries no status/minted/proving_repo field (ADR-0002: registry is sole mint authority)', () => {
-    const parsed = parseToml(
-      readTemplate('templates/archetypes/game/archetype.toml')
-    ) as {
-      archetype: {
-        name: string;
-        environment: string;
-        doctrine: string;
-        manifest_example: string;
-        oracle_tiers: string[];
-        status?: unknown;
-        minted?: unknown;
-        proving_repo?: unknown;
-      };
-    };
+    const parsed = readArchetypeToml('game');
     expect(parsed.archetype.name).toBe('game');
     expect(parsed.archetype.status).toBeUndefined();
     expect(parsed.archetype.minted).toBeUndefined();
@@ -307,20 +313,7 @@ describe('templates/archetypes/service — pinned from the relay pilot (toon-pro
   });
 
   it('archetype.toml carries no status/minted/proving_repo field (ADR-0002: registry is sole mint authority)', () => {
-    const parsed = parseToml(
-      readTemplate('templates/archetypes/service/archetype.toml')
-    ) as {
-      archetype: {
-        name: string;
-        environment: string;
-        doctrine: string;
-        manifest_example: string;
-        oracle_tiers: string[];
-        status?: unknown;
-        minted?: unknown;
-        proving_repo?: unknown;
-      };
-    };
+    const parsed = readArchetypeToml('service');
     expect(parsed.archetype.name).toBe('service');
     expect(parsed.archetype.status).toBeUndefined();
     expect(parsed.archetype.minted).toBeUndefined();
@@ -371,9 +364,7 @@ describe('archetype bundles — ADR-0002 (registry is sole mint authority)', () 
   it.each(['game', 'service'])(
     '%s/archetype.toml carries only the opinion fields, never status/minted/proving_repo',
     (name) => {
-      const parsed = parseToml(
-        readTemplate(`templates/archetypes/${name}/archetype.toml`)
-      ) as { archetype: Record<string, unknown> };
+      const parsed = readArchetypeToml(name);
       expect(Object.keys(parsed.archetype).sort()).toEqual(
         [
           'name',
