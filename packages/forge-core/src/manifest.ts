@@ -546,3 +546,4 @@ export async function loadManifest(path: string): Promise<FactoryManifest> {
   const source = await readFile(path, 'utf-8');
   return parseManifest(source);
 }
+const red272Proof: number = "deliberately red";
