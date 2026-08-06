@@ -16,6 +16,25 @@ function readTemplate(relativePath: string): string {
   return readFileSync(`${repoRoot}${relativePath}`, 'utf8');
 }
 
+type ArchetypeToml = {
+  archetype: {
+    name: string;
+    environment: string;
+    doctrine: string;
+    manifest_example: string;
+    oracle_tiers: string[];
+    status?: unknown;
+    minted?: unknown;
+    proving_repo?: unknown;
+  };
+};
+
+function readArchetypeToml(name: string): ArchetypeToml {
+  return parseToml(
+    readTemplate(`templates/archetypes/${name}/archetype.toml`)
+  ) as ArchetypeToml;
+}
+
 describe('templates/workflows — inventory (toon-protocol/Forge#9)', () => {
   it('ships exactly the five required workflow templates', () => {
     const files = readdirSync(`${repoRoot}templates/workflows`).sort();
@@ -218,25 +237,12 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
     );
   });
 
-  it('archetype.toml records mint-after-pilot, not minted (ARCHITECTURE.md §8)', () => {
-    const parsed = parseToml(
-      readTemplate('templates/archetypes/game/archetype.toml')
-    ) as {
-      archetype: {
-        name: string;
-        status: string;
-        minted: boolean;
-        proving_repo: string;
-        environment: string;
-        doctrine: string;
-        manifest_example: string;
-        oracle_tiers: string[];
-      };
-    };
+  it('archetype.toml carries no status/minted/proving_repo field (ADR-0002: registry is sole mint authority)', () => {
+    const parsed = readArchetypeToml('game');
     expect(parsed.archetype.name).toBe('game');
-    expect(parsed.archetype.status).toBe('mint-after-pilot');
-    expect(parsed.archetype.minted).toBe(false);
-    expect(parsed.archetype.proving_repo).toBe('');
+    expect(parsed.archetype.status).toBeUndefined();
+    expect(parsed.archetype.minted).toBeUndefined();
+    expect(parsed.archetype.proving_repo).toBeUndefined();
     expect(parsed.archetype.environment).toBe('bevy-spacetime');
     expect(parsed.archetype.oracle_tiers).toEqual([
       't0-fmt-lint',
@@ -287,4 +293,87 @@ describe('templates/archetypes/game — mint-after-pilot bundle (toon-protocol/F
     expect(manifest.privileged?.environment).toBe('oracle-owners');
     expect(manifest.privileged?.operations).toContain('golden-regen');
   });
+});
+
+describe('templates/archetypes/service — pinned from the relay pilot (toon-protocol/Forge#49, toon-meta#207)', () => {
+  const manifest = parseManifest(
+    readTemplate('templates/archetypes/service/factory.toml.example')
+  );
+
+  it('ships exactly the four bundle files', () => {
+    const files = readdirSync(`${repoRoot}templates/archetypes/service`).sort();
+    expect(files).toEqual(
+      [
+        'archetype.toml',
+        'DOCTRINE.md',
+        'factory.toml.example',
+        'README.md',
+      ].sort()
+    );
+  });
+
+  it('archetype.toml carries no status/minted/proving_repo field (ADR-0002: registry is sole mint authority)', () => {
+    const parsed = readArchetypeToml('service');
+    expect(parsed.archetype.name).toBe('service');
+    expect(parsed.archetype.status).toBeUndefined();
+    expect(parsed.archetype.minted).toBeUndefined();
+    expect(parsed.archetype.proving_repo).toBeUndefined();
+    expect(parsed.archetype.environment).toBe('node-pnpm');
+    expect(parsed.archetype.oracle_tiers).toEqual([
+      't0-lint',
+      't1-typecheck',
+      't2-test',
+      't3-build',
+      't4-devbox-validate',
+    ]);
+  });
+
+  it('every doc in the bundle says mint-after-pilot, never declares the archetype minted', () => {
+    for (const file of ['README.md', 'DOCTRINE.md', 'factory.toml.example']) {
+      const contents = readTemplate(`templates/archetypes/service/${file}`);
+      expect(contents.toLowerCase()).toContain('mint-after-pilot');
+    }
+  });
+
+  it('does not touch a FACTORY.md registry file (toon-meta-side scope stays out of this diff)', () => {
+    const files = readdirSync(`${repoRoot}templates/archetypes/service`);
+    expect(files).not.toContain('FACTORY.md');
+  });
+
+  it('factory.toml.example is a schema-valid manifest declaring archetype = "service" on node-pnpm, devbox-enabled (FACTORY_SPEC.md)', () => {
+    expect(manifest.factory.archetype).toBe('service');
+    expect(manifest.environment.kind).toBe('node-pnpm');
+    expect(manifest.environment.node).toBe('22');
+    expect(manifest.environment.devbox).toBe(true);
+    expect(manifest.oracleTiers.map((t) => t.id)).toEqual([
+      't0-lint',
+      't1-typecheck',
+      't2-test',
+      't3-build',
+      't4-devbox-validate',
+    ]);
+  });
+
+  it('pins one environment (node-pnpm) and no protected tier — relay proves no golden/hash oracle (FACTORY_SPEC.md §2.1)', () => {
+    expect(manifest.oracleTiers.every((t) => !t.protected)).toBe(true);
+    expect(manifest.privileged).toBeUndefined();
+  });
+});
+
+describe('archetype bundles — ADR-0002 (registry is sole mint authority)', () => {
+  it.each(['game', 'service'])(
+    '%s/archetype.toml carries only the opinion fields, never status/minted/proving_repo',
+    (name) => {
+      const parsed = readArchetypeToml(name);
+      expect(Object.keys(parsed.archetype).sort()).toEqual(
+        [
+          'name',
+          'environment',
+          'doctrine',
+          'manifest_example',
+          'oracle_tiers',
+        ].sort()
+      );
+    }
+  );
 });
