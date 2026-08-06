@@ -1,10 +1,12 @@
 /**
  * `forge review` — run forge-core's reviewer standalone over an existing PR
- * (the `agent:review` path, Forge#24b). Resolves the PR's head branch, opens a
- * sandbox on it (`prepareForReview` — no implement phase), runs the reviewer on
- * the manifest's `reviewer` model, and pushes any refinement commits back to
- * the PR branch, verifying they landed (fail-loud, toon-meta#235). Never
- * merges, never closes — a human still merges.
+ * (the `agent:review` path, Forge#24b). Resolves the PR's head branch,
+ * materialises it as a local branch (the workflow checks out main —
+ * toon-meta#275 / connector#634), opens a sandbox on it (`prepareForReview` —
+ * no implement phase), runs the reviewer on the manifest's `reviewer` model,
+ * and pushes any refinement commits back to the PR branch, verifying they
+ * landed (fail-loud, toon-meta#235). Never merges, never closes — a human
+ * still merges.
  *
  * Reuses `sandboxSecrets` / `SANDBOX_READY_HOOKS` from `run.ts`. `gh`/manifest/
  * runner seams are injectable so this is unit-testable with no sandbox.
@@ -27,6 +29,22 @@ function fetchHeadRef(prNumber: string): string {
     ['pr', 'view', prNumber, '--json', 'headRefName', '--jq', '.headRefName'],
     { encoding: 'utf-8' }
   ).trim();
+}
+
+/**
+ * Materialises the PR head as a LOCAL branch at origin's tip. The
+ * `agent:review` workflow checks out MAIN, never the PR head — sandcastle
+ * checks the head branch out in its OWN worktree under
+ * `.sandcastle/worktrees/`, and git refuses one branch in two worktrees
+ * (connector#634's first live run). Without a local branch the engine's
+ * `worktree add -b <branch> HEAD` fallback silently reviews an EMPTY diff off
+ * main. Forced so a re-labeled PR re-reviews the CURRENT head even after a
+ * force-push.
+ */
+function materialiseHeadBranch(branch: string): void {
+  execFileSync('git', ['fetch', 'origin', `+${branch}:${branch}`], {
+    stdio: 'inherit',
+  });
 }
 
 /**
@@ -76,6 +94,8 @@ export interface ForgeReviewOptions {
   readonly createRunners?: typeof createSandcastleRunners;
   readonly resolveReviewer?: (manifest: FactoryManifest) => AgentProvider;
   readonly getHeadRef?: (prNumber: string) => string;
+  /** Materialises the PR head as a local branch (the workflow checks out main). */
+  readonly materialiseHead?: (branch: string) => void;
   readonly verifyPushed?: (shas: readonly string[], branch: string) => string[];
   readonly sandboxProvider?: SandboxProvider;
 }
@@ -100,6 +120,7 @@ export async function forgeReview(
   const resolveReviewer =
     options.resolveReviewer ?? ((m) => resolveRoleAgent(m, 'reviewer'));
   const getHeadRef = options.getHeadRef ?? fetchHeadRef;
+  const materialiseHead = options.materialiseHead ?? materialiseHeadBranch;
   const verifyPushed = options.verifyPushed ?? verifyCommitsLanded;
   const sandboxProvider =
     options.sandboxProvider ?? docker({ env: sandboxSecrets() });
@@ -111,6 +132,7 @@ export async function forgeReview(
       `forge review: could not resolve the head branch for PR #${prNumber}.`
     );
   }
+  materialiseHead(branch);
 
   const runners = createRunners({
     sandboxProvider,

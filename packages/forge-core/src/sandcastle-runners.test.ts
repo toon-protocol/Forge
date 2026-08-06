@@ -242,7 +242,14 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
       agent: AGENT,
       maxIterations: 1,
       promptFile: '.sandcastle/review-prompt.md',
-      promptArgs: { BRANCH: DISPATCH.branch },
+      promptArgs: {
+        BRANCH: DISPATCH.branch,
+        // The Spec-axis issue id is recovered from the branch convention
+        // (toon-meta#275); the title is cosmetic — the reviewer reads the
+        // issue itself via `gh issue view`.
+        ISSUE_NUMBER: '33',
+        ISSUE_TITLE: '(issue #33 — read it with `gh issue view 33`)',
+      },
     });
     expect(review.commits).toEqual([{ sha: 'review-1' }]);
 
@@ -281,6 +288,28 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
 
     await runners.close();
     expect(sandbox.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('runReview passes ISSUE_NUMBER "none" (Standards-only review) for a branch outside the issue convention', async () => {
+    const run = vi.fn(async () => sandboxRunResult());
+    const sandbox = fakeSandbox({ run });
+    const createSandbox = vi.fn(async () => sandbox);
+
+    const runners = createSandcastleRunners({
+      sandboxProvider: SANDBOX_PROVIDER,
+      createSandbox,
+    });
+    await runners.prepareForReview('epic/some-hand-made-branch');
+    await runners.runReview(AGENT, 'epic/some-hand-made-branch');
+
+    const args = run.mock.calls[0]![0] as {
+      promptArgs: Record<string, string>;
+    };
+    expect(args.promptArgs).toEqual({
+      BRANCH: 'epic/some-hand-made-branch',
+      ISSUE_NUMBER: 'none',
+      ISSUE_TITLE: '(no target issue resolved)',
+    });
   });
 
   it('openPr pushes the branch and opens a PR when none is open yet (success on first try)', async () => {
