@@ -28,6 +28,7 @@ function deps(reviewCommits: { sha: string }[] = []) {
     createRunners: vi.fn(() => runners),
     resolveReviewer: vi.fn(() => REVIEWER),
     getHeadRef: vi.fn(() => 'sandcastle/issue-42'),
+    materialiseHead: vi.fn(),
     verifyPushed: vi.fn(() => [] as string[]),
     sandboxProvider: { name: 'fake' } as never,
   };
@@ -40,6 +41,7 @@ function call(d: ReturnType<typeof deps>, prNumber = '9') {
     createRunners: d.createRunners as never,
     resolveReviewer: d.resolveReviewer,
     getHeadRef: d.getHeadRef,
+    materialiseHead: d.materialiseHead,
     verifyPushed: d.verifyPushed,
     sandboxProvider: d.sandboxProvider,
   });
@@ -51,6 +53,9 @@ describe('forgeReview', () => {
     const outcome = await call(d);
 
     expect(d.getHeadRef).toHaveBeenCalledWith('9');
+    // The workflow checks out main, so the PR head must be materialised as a
+    // local branch before the sandbox opens (toon-meta#275 / connector#634).
+    expect(d.materialiseHead).toHaveBeenCalledWith('sandcastle/issue-42');
     expect(d.runners.prepareForReview).toHaveBeenCalledWith(
       'sandcastle/issue-42'
     );
