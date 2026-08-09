@@ -371,12 +371,30 @@ export function createSandcastleRunners(
     requireSandbox().exec(command, options);
 
   const runReview: ReviewRunner = async (agent, branch) => {
+    // review-prompt.md now requires ISSUE_NUMBER/ISSUE_TITLE (the Spec axis,
+    // toon-meta#275) — an unresolved {{...}} placeholder fails the run. The
+    // ReviewRunner seam only carries the branch, so recover the issue number
+    // from the deterministic `sandcastle/issue-<id>` convention (the same id
+    // the factory PR body's `Closes #n` names); a branch outside the
+    // convention gets a Standards-only review. The reviewer reads the issue
+    // itself in-sandbox (`gh issue view`), so the title here is cosmetic.
+    // This path does not yet CONSUME the reviewer's <review> verdict —
+    // enforcement lives in the stage-0 label runners (via
+    // .sandcastle/review-verdict.ts); wiring it into forge-core is part of
+    // the auto-merge work (toon-meta#270).
+    const issueId = ISSUE_ID_FROM_BRANCH.exec(branch)?.[1];
     const result = await requireSandbox().run({
       name: 'reviewer',
       agent,
       maxIterations: 1,
       promptFile: reviewPromptFile,
-      promptArgs: { BRANCH: branch },
+      promptArgs: {
+        BRANCH: branch,
+        ISSUE_NUMBER: issueId ?? 'none',
+        ISSUE_TITLE: issueId
+          ? `(issue #${issueId} — read it with \`gh issue view ${issueId}\`)`
+          : '(no target issue resolved)',
+      },
     });
     return { commits: result.commits };
   };
