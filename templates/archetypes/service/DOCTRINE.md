@@ -50,10 +50,11 @@ full, same as the bare `node-pnpm` ladder. Two service-specific corollaries:
    deterministic (the build either succeeds or it doesn't) but are not part of the
    `[[oracle.tier]]` ladder because they publish artifacts, they don't judge a diff.
 2. **The connector-image pin is a version bump, not a free-floating tag.** `CONNECTOR_TAG` is
-   pinned deliberately (relay: `3.28.0`) so the config schema and HTTP-envelope contract stay
-   frozen against a known connector; bumping it is a pin-bump change (FACTORY_SPEC.md
-   `[privileged]` territory once a repo protects that decision), not a silent latest-tracks-latest
-   float.
+   pinned deliberately (relay: `rust-sha-440eab7`, the Rust connector build — a plain semver tag
+   like `3.28.0` names the retired TypeScript connector, which cannot start on this repo's
+   `connector.toml`) so the config schema and HTTP-envelope contract stay frozen against a known
+   connector; bumping it is a pin-bump change (FACTORY_SPEC.md `[privileged]` territory once a
+   repo protects that decision), not a silent latest-tracks-latest float.
 
 ## Testing (T0-T4, see `factory.toml.example`)
 
