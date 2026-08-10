@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { forgeRun, sandboxSecrets, SANDBOX_READY_HOOKS } from './run.js';
+import {
+  forgeRun,
+  sandboxSecrets,
+  SANDBOX_READY_HOOKS,
+  withMasking,
+} from './run.js';
 import type { FactoryManifest } from '@toon-protocol/forge-core';
 
 const MANIFEST = {
@@ -15,6 +20,7 @@ function fakeRunners() {
     exec: vi.fn(),
     runReview: vi.fn(),
     openPr: vi.fn(),
+    pushEarly: vi.fn(),
     close: vi.fn(async () => {}),
   };
 }
@@ -52,6 +58,9 @@ describe('forgeRun', () => {
       runCycle: vi.fn(async () => ({ pr: PR })),
       getIssueTitle: vi.fn(() => 'Fix the bug'),
       sandboxProvider: { name: 'fake' } as never,
+      // No App credentials by default — mirrors local dev / any run with
+      // only an ambient GH_TOKEN (toon-meta#248: mintToken stays undefined).
+      createTokenMinter: vi.fn(() => undefined),
     };
   }
 
@@ -65,12 +74,14 @@ describe('forgeRun', () => {
       runCycle: d.runCycle as never,
       getIssueTitle: d.getIssueTitle,
       sandboxProvider: d.sandboxProvider,
+      createTokenMinter: d.createTokenMinter as never,
     });
 
     expect(d.loadManifest).toHaveBeenCalledWith('factory.toml');
     expect(d.createRunners).toHaveBeenCalledWith({
       sandboxProvider: d.sandboxProvider,
       hooks: SANDBOX_READY_HOOKS,
+      mintToken: undefined,
     });
 
     const [issueArg, optsArg] = d.runCycle.mock.calls[0]!;
@@ -81,6 +92,7 @@ describe('forgeRun', () => {
     expect(optsArg.exec).toBe(d.runners.exec);
     expect(optsArg.runReview).toBe(d.runners.runReview);
     expect(optsArg.openPr).toBe(d.runners.openPr);
+    expect(optsArg.pushEarly).toBe(d.runners.pushEarly);
 
     expect(result).toEqual(PR);
     expect(d.runners.close).toHaveBeenCalledTimes(1);
@@ -97,6 +109,7 @@ describe('forgeRun', () => {
         runCycle: d.runCycle as never,
         getIssueTitle: d.getIssueTitle,
         sandboxProvider: d.sandboxProvider,
+        createTokenMinter: d.createTokenMinter as never,
       })
     ).rejects.toThrow('boom');
     expect(d.runners.close).toHaveBeenCalledTimes(1);
@@ -112,9 +125,52 @@ describe('forgeRun', () => {
         runCycle: d.runCycle as never,
         getIssueTitle: d.getIssueTitle,
         sandboxProvider: d.sandboxProvider,
+        createTokenMinter: d.createTokenMinter as never,
       })
     ).rejects.toThrow(/numeric/);
     expect(d.loadManifest).not.toHaveBeenCalled();
     expect(d.createRunners).not.toHaveBeenCalled();
+  });
+
+  it('mints via a masking-wrapped function and passes it as mintToken when App credentials are present (toon-meta#248)', async () => {
+    const d = deps();
+    const rawMint = vi.fn(async () => 'ghs_fresh');
+    d.createTokenMinter.mockReturnValue(rawMint);
+
+    await forgeRun({
+      issueNumber: '42',
+      loadManifest: d.loadManifest,
+      createRunners: d.createRunners as never,
+      runCycle: d.runCycle as never,
+      getIssueTitle: d.getIssueTitle,
+      sandboxProvider: d.sandboxProvider,
+      createTokenMinter: d.createTokenMinter as never,
+    });
+
+    const call = d.createRunners.mock.calls[0]![0] as {
+      mintToken?: () => Promise<string>;
+    };
+    expect(call.mintToken).toBeDefined();
+    expect(call.mintToken).not.toBe(rawMint); // wrapped, not passed through raw
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const token = await call.mintToken!();
+    expect(token).toBe('ghs_fresh');
+    expect(logSpy).toHaveBeenCalledWith('::add-mask::ghs_fresh');
+    logSpy.mockRestore();
+  });
+});
+
+describe('withMasking', () => {
+  it('registers every minted token with Actions log masking before returning it', async () => {
+    const mint = vi.fn(async () => 'ghs_secret');
+    const masked = withMasking(mint);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const token = await masked();
+
+    expect(token).toBe('ghs_secret');
+    expect(logSpy).toHaveBeenCalledWith('::add-mask::ghs_secret');
+    logSpy.mockRestore();
   });
 });

@@ -28,6 +28,16 @@
  * name and a copy-pasteable recovery `gh pr create` command, and posting the
  * same as an issue comment when `gh.issueComment` is wired up — the pushed
  * branch itself is never deleted on this path.
+ *
+ * Every push (`openPr`'s and the standalone `pushEarly` runner's) goes
+ * through `pushBranch`, which mints a fresh App installation token
+ * immediately beforehand when a `mintToken` is configured (toon-meta#248,
+ * ported from connector#463): App installation tokens expire ONE HOUR after
+ * mint, so a runner that mints once at job start and pushes only at the end
+ * of a long cycle dies at the final push after every expensive iteration has
+ * already been spent (connector#462). `openPr` is also where `pushEarly`
+ * publishes best-effort right after the implement phase, so a run killed
+ * during review still leaves recoverable work on the remote.
  */
 import { execFileSync } from 'node:child_process';
 import * as sandcastle from '@ai-hero/sandcastle';
@@ -46,6 +56,7 @@ import type {
   ImplementRunner,
   PlanRunner,
   PrOpener,
+  PushEarly,
   ReviewRunner,
 } from './cycle.js';
 
@@ -155,6 +166,56 @@ function toIteration(result: SandboxRunResult): Iteration {
   };
 }
 
+/**
+ * Pushes `branch` to origin (toon-meta#248, ported from connector#463).
+ *
+ * When `mintToken` is configured, mints a fresh App installation token
+ * IMMEDIATELY before this push (instead of relying on one minted once at job
+ * start, which expires after an hour) and refreshes the host's own
+ * `process.env.GH_TOKEN` — the `gh.prList`/`gh.prCreate` calls that follow a
+ * push authenticate from that same env var and would otherwise expire on the
+ * identical clock.
+ *
+ * The fresh token is delivered into the sandbox via STDIN into a mode-600
+ * file, read back by a one-shot `credential.helper` and deleted immediately
+ * after (`trap ... EXIT` covers both a successful and a failed push). The
+ * leading `-c credential.helper=` is LOAD-BEARING: `credential.helper` is a
+ * MULTI-VALUED git config key, so an empty value is required to RESET the
+ * list before the one-shot helper is added — without it, the
+ * container-global helper `gh auth setup-git` installed in
+ * `SANDBOX_READY_HOOKS` (`packages/forge-cli/src/run.ts`) at sandbox start
+ * is still consulted FIRST and the freshly minted token is silently never
+ * used. Verified directly in `sandcastle-runners.test.ts`: the "mints a
+ * fresh token immediately before pushing" case asserts the empty reset
+ * appears in the pushed command ahead of the one-shot helper.
+ *
+ * When `mintToken` is `undefined` (no `APP_ID`/`APP_PRIVATE_KEY` on the
+ * host — local dev, or any run with only an ambient `GH_TOKEN`) this pushes
+ * exactly as before: the container-global helper handles auth, unchanged.
+ */
+async function pushBranch(
+  sandbox: Sandbox,
+  branch: string,
+  mintToken: (() => Promise<string>) | undefined
+): ReturnType<Sandbox['exec']> {
+  if (!mintToken) {
+    return sandbox.exec(`git push -u origin ${branch}`);
+  }
+
+  const token = await mintToken();
+  process.env.GH_TOKEN = token;
+
+  const pushScript = `set -euo pipefail
+TOKEN_FILE=$(mktemp)
+export TOKEN_FILE
+chmod 600 "$TOKEN_FILE"
+cat > "$TOKEN_FILE"
+trap 'rm -f "$TOKEN_FILE"' EXIT
+git -c credential.helper= -c 'credential.helper=!f() { echo "username=x-access-token"; echo "password=$(cat "$TOKEN_FILE")"; }; f' push -u origin ${branch}
+`;
+  return sandbox.exec(pushScript, { stdin: token });
+}
+
 /** A minimal GitHub client for the deterministic push+PR step (toon-meta#235 — no agent, plain plumbing). */
 export interface GhClient {
   readonly prList: (args: {
@@ -252,6 +313,14 @@ export interface SandcastleRunnersConfig {
   readonly gh?: GhClient;
   readonly runPlanAgent?: PlanAgentRun;
   readonly createSandbox?: CreateSandboxFn;
+  /**
+   * Mints a fresh push credential immediately before every push
+   * (toon-meta#248). `undefined` (the default) falls back to whatever
+   * credential the sandbox was set up with (an ambient `GH_TOKEN` and the
+   * container-global `gh auth setup-git` helper — see `SANDBOX_READY_HOOKS`
+   * in `packages/forge-cli/src/run.ts`) — local runs are unchanged.
+   */
+  readonly mintToken?: () => Promise<string>;
   /** Retry policy for the PR-open step's `gh pr create` call (Forge#43). Default: {@link DEFAULT_PR_CREATE_RETRY_DELAYS_MS} with a real `setTimeout`-backed sleep. */
   readonly prCreateRetry?: {
     /** Delay before each retry — length is the retry count (attempts = length + 1). Default: {@link DEFAULT_PR_CREATE_RETRY_DELAYS_MS}. */
@@ -266,6 +335,13 @@ export interface SandcastleRunners {
   readonly exec: Execer;
   readonly runReview: ReviewRunner;
   readonly openPr: PrOpener;
+  /**
+   * Best-effort branch publish right after the implement phase
+   * (toon-meta#248) — wired into `runCycle`'s `pushEarly` option. Unlike
+   * `openPr` this throws on a push failure (the primitive fails loud);
+   * `runCycle` is what makes the call best-effort by catching it.
+   */
+  readonly pushEarly: PushEarly;
   /**
    * Opens the shared sandbox on an EXISTING branch (a PR head) so `runReview`
    * / `exec` can run without an implement phase — the standalone `agent:review`
@@ -298,6 +374,7 @@ export function createSandcastleRunners(
   const prCreateRetryDelaysMs =
     config.prCreateRetry?.delaysMs ?? DEFAULT_PR_CREATE_RETRY_DELAYS_MS;
   const sleep = config.prCreateRetry?.sleep ?? defaultSleep;
+  const mintToken = config.mintToken;
 
   let sandbox: Sandbox | undefined;
 
@@ -399,10 +476,17 @@ export function createSandcastleRunners(
     return { commits: result.commits };
   };
 
+  const pushEarly: PushEarly = async (dispatch) => {
+    const push = await pushBranch(requireSandbox(), dispatch.branch, mintToken);
+    if (push.exitCode !== 0) {
+      throw new Error(
+        `early publish: push of '${dispatch.branch}' failed (exit ${push.exitCode}).\n${push.stderr}`
+      );
+    }
+  };
+
   const openPr: PrOpener = async (dispatch, issue) => {
-    const push = await requireSandbox().exec(
-      `git push -u origin ${dispatch.branch}`
-    );
+    const push = await pushBranch(requireSandbox(), dispatch.branch, mintToken);
     if (push.exitCode !== 0) {
       throw new Error(
         `git push of '${dispatch.branch}' failed (exit ${push.exitCode}).\n${push.stderr}`
@@ -489,6 +573,7 @@ export function createSandcastleRunners(
     exec,
     runReview,
     openPr,
+    pushEarly,
     prepareForReview,
     close,
   };

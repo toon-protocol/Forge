@@ -123,9 +123,21 @@ export type PrOpener = (
   issue: LabeledIssueRef
 ) => Promise<PullRequestRef>;
 
+/**
+ * Best-effort branch publish right after the implement phase (toon-meta#248)
+ * — a run killed during the pre-review gate or review still leaves
+ * recoverable work on the remote instead of discarding the sandbox.
+ * Generalizes the `push:early` step of connector's
+ * `.sandcastle/agent-implement-issue.ts`. A rejection here must NOT fail the
+ * cycle — `runCycle` itself catches and logs it.
+ */
+export type PushEarly = (dispatch: ImplementDispatch) => Promise<void>;
+
 export interface RunCycleOptions extends PlanImplementCycleOptions {
   readonly runReview: ReviewRunner;
   readonly openPr: PrOpener;
+  /** Optional — omit to skip early publish entirely (e.g. in tests). */
+  readonly pushEarly?: PushEarly;
 }
 
 export interface RunCycleReport extends PlanImplementCycleReport {
@@ -147,6 +159,21 @@ export async function runCycle(
   options: RunCycleOptions
 ): Promise<RunCycleReport> {
   const planImplement = await runPlanImplementCycle(issue, options);
+
+  if (options.pushEarly) {
+    // Best-effort (toon-meta#248): a kill during the pre-review gate or
+    // review must still leave the implementer's work on the remote, but a
+    // failed early publish (e.g. a transient network blip) must not fail an
+    // otherwise-healthy cycle — the final push in the PR phase is still the
+    // one that must succeed.
+    try {
+      await options.pushEarly(planImplement.dispatch);
+    } catch (err) {
+      console.error(
+        `runCycle: best-effort early publish failed (continuing) — ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
 
   const preReviewGate = await runPreReviewGate(options.exec, options.manifest);
 
