@@ -55,7 +55,19 @@ import {
 // absent (local dev / no App installed) — `pushBranch` below then falls back
 // to the ambient GH_TOKEN + the container-global credential helper wired in
 // `hooks` below, unchanged from before this fix.
-const mintToken = createTokenMinter();
+const rawMintToken = createTokenMinter();
+
+// Registers every minted token with Actions' log masking (`::add-mask::`) the
+// instant it is minted — defence in depth alongside the redact-then-upload
+// log artifact step, mirroring packages/forge-cli/src/run.ts's `withMasking`
+// on the live forge-core push path.
+const mintToken = rawMintToken
+  ? async () => {
+      const token = await rawMintToken();
+      console.log(`::add-mask::${token}`);
+      return token;
+    }
+  : undefined;
 
 /**
  * Pushes `branch` to origin, minting a fresh App installation token
