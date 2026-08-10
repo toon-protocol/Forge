@@ -240,6 +240,65 @@ describe('stamp — archetype branch (game)', () => {
   });
 });
 
+describe('stamp — archetype branch (service, Forge#49)', () => {
+  function servicePlan(targetDir: string): StampPlan {
+    return {
+      factory: {
+        name: 'relay',
+        repo: 'toon-protocol/relay',
+        archetype: 'service',
+      },
+      environment: {
+        kind: 'node-pnpm',
+        node: '22',
+        lockfile: 'pnpm-lock.yaml',
+        devbox: true,
+      },
+      targetDir,
+    };
+  }
+
+  it("applies the archetype's pinned oracle ladder verbatim (no protected tiers to rewire)", async () => {
+    const targetDir = await tempTargetDir();
+    const result = await stamp(servicePlan(targetDir));
+
+    expect(result.manifest.oracleTiers.map((t) => t.id)).toEqual([
+      't0-lint',
+      't1-typecheck',
+      't2-test',
+      't3-build',
+      't4-devbox-validate',
+    ]);
+    // No protected tiers in the service ladder — every tier keeps its real command.
+    expect(result.manifest.oracleTiers.every((t) => !t.protected)).toBe(true);
+    const devboxTier = result.manifest.oracleTiers.find(
+      (t) => t.id === 't4-devbox-validate'
+    );
+    expect(devboxTier?.run).toContain('devbox run');
+    expect(result.manifest.privileged).toBeUndefined();
+    expect(result.files).toContain('DOCTRINE.md');
+
+    const doctrine = await readFile(join(targetDir, 'DOCTRINE.md'), 'utf-8');
+    expect(doctrine.toLowerCase()).toContain('mint-after-pilot');
+
+    const dockerfile = await readFile(
+      join(targetDir, '.sandcastle/Dockerfile'),
+      'utf-8'
+    );
+    expect(dockerfile).toMatch(/FROM node:/);
+  });
+
+  it('produces a factory.toml that round-trips through forge-core validation', async () => {
+    const targetDir = await tempTargetDir();
+    await stamp(servicePlan(targetDir));
+    const written = await readFile(join(targetDir, 'factory.toml'), 'utf-8');
+    const reparsed = parseManifest(written);
+    expect(reparsed.factory.archetype).toBe('service');
+    expect(reparsed.environment.devbox).toBe(true);
+    expect(reparsed.privileged).toBeUndefined();
+  });
+});
+
 describe('serializeManifest', () => {
   it('round-trips a manifest through forge-core parseManifest', () => {
     const text = serializeManifest({

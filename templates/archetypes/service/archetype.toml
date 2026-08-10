@@ -1,0 +1,36 @@
+# Archetype provenance record for `service` (payment-fronted node service on
+# the pinned `node-pnpm` stack). Shape mirrors what FACTORY_SPEC.md §2.1
+# expects a minted catalog entry to carry.
+#
+# This bundle describes the opinion; it never asserts the archetype exists.
+# Per toon-meta/docs/adr/0002-registry-is-sole-mint-authority.md,
+# toon-meta/FACTORY.md is the sole authority on whether an archetype is
+# minted — resolving an archetype (`forge new`/`forge validate`) always
+# consults the registry, never this file's presence or contents.
+#
+# MINT-AFTER-PILOT (ARCHITECTURE.md §8, toon-meta#198): this archetype does
+# not exist until a service repo runs `factory.toml.example` (this
+# directory) end to end via >=1 merged `agent:implement` PR, and
+# toon-meta/FACTORY.md records it as minted. relay (toon-protocol/relay,
+# merged agent:implement PRs #70/#77/#81) is the pilot this bundle's pinned
+# opinion is derived from — see README.md for exactly what was and wasn't
+# pinned. Until FACTORY.md records `service` as minted:
+#   - no repo may set its own `factory.toml`'s `[factory].archetype =
+#     "service"` and expect `forge validate` to accept it (FACTORY_SPEC.md
+#     §8 rule 4)
+#   - this file does NOT register `service` in `toon-meta/FACTORY.md` —
+#     that registration is a separate toon-meta-side ticket
+#     (toon-meta#207), not this diff's
+
+[archetype]
+name             = "service"
+environment      = "node-pnpm"
+doctrine         = "DOCTRINE.md"
+manifest_example = "factory.toml.example"
+oracle_tiers     = [
+  "t0-lint",
+  "t1-typecheck",
+  "t2-test",
+  "t3-build",
+  "t4-devbox-validate",
+]

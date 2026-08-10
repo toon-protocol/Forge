@@ -1,0 +1,76 @@
+# Worked example — a repo minting `[factory].archetype = "service"`.
+#
+# Illustrative only, per templates/README.md (inert text, not built/linted by
+# Forge's own gate). `service` is mint-after-pilot (see archetype.toml in
+# this directory): a real repo cannot set this until toon-meta/FACTORY.md
+# records a pilot (FACTORY_SPEC.md §8 rule 4). Shape matches FACTORY_SPEC.md
+# §9's worked example for Forge's own manifest, adapted to the `node-pnpm`
+# environment and the oracle ladder relay (toon-protocol/relay, the pilot)
+# actually runs in `.github/workflows/ci.yml` — see README.md for exactly
+# what was and wasn't pinned from relay's real tree.
+
+[factory]
+name        = "<pilot-repo>"
+repo        = "toon-protocol/<pilot-repo>"
+archetype   = "service"
+description = "Payment-fronted node service on the pinned node-pnpm stack, deployed behind a TOON connector."
+
+[environment]
+kind     = "node-pnpm"
+node     = "22"
+lockfile = "pnpm-lock.yaml"
+devbox   = true
+
+[loop]
+template        = "parallel-planner-with-review"
+inner_gates     = ["t0-lint", "t1-typecheck"]
+context_ceiling = 0.60
+[loop.models]
+planner     = "claude-opus-4-8"
+merger      = "claude-opus-4-8"
+implementer = "claude-sonnet-5"
+reviewer    = "claude-sonnet-5"
+
+# T0-T3 mirror relay's ci.yml `build` job (its proven lint/build/typecheck/
+# test commands) — the same shape as the `--blank` node-pnpm ladder
+# (stamp.ts's defaultLadderForKind), since a service's toolchain checks
+# aren't archetype-specific.
+[[oracle.tier]]
+id       = "t0-lint"
+run      = "pnpm lint"
+on       = ["**/*.ts"]
+surfaces = ["inner", "pr"]
+cost     = "cheap"
+
+[[oracle.tier]]
+id       = "t1-typecheck"
+run      = "pnpm typecheck"
+on       = ["**/*.ts"]
+surfaces = ["inner", "pr"]
+cost     = "cheap"
+
+[[oracle.tier]]
+id       = "t2-test"
+run      = "pnpm -r test --if-present"
+on       = ["**/*.ts"]
+surfaces = ["pr"]
+cost     = "moderate"
+
+[[oracle.tier]]
+id       = "t3-build"
+run      = "pnpm -r build"
+on       = ["**/*.ts"]
+surfaces = ["pr"]
+cost     = "moderate"
+
+# T4 — what actually distinguishes `service` beyond the bare node-pnpm
+# ladder: relay's ci.yml runs a second job (`devbox-validate`) asserting the
+# pinned devbox toolchain resolves and smoke-builds, because a service's
+# `devbox.json` is load-bearing for its deploy story (`[environment].devbox
+# = true`), not just a convenience wrapper.
+[[oracle.tier]]
+id       = "t4-devbox-validate"
+run      = "devbox run -- bash -c \"pnpm install --frozen-lockfile && pnpm build\""
+on       = ["devbox.json", "devbox.lock", "package.json", "pnpm-lock.yaml"]
+surfaces = ["pr"]
+cost     = "moderate"

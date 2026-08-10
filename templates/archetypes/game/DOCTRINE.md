@@ -1,9 +1,10 @@
 # Game doctrine — `game` archetype (mint-after-pilot)
 
-> Status: **mint-after-pilot** (`archetype.toml`). This doctrine is prepared, not proven — it
-> becomes binding for stamped repos once the first `game` pilot merges (ARCHITECTURE.md §8).
-> It specializes the Forge-level determinism doctrine (`ARCHITECTURE.md` §3) for a Bevy client +
-> SpacetimeDB server on the pinned stack; it does not replace it.
+> Status: **mint-after-pilot** (ARCHITECTURE.md §8) — decided solely by `toon-meta/FACTORY.md`,
+> never by this bundle. This doctrine is prepared, not proven — it becomes binding for stamped
+> repos once the first `game` pilot merges. It specializes the Forge-level determinism doctrine
+> (`ARCHITECTURE.md` §3) for a Bevy client + SpacetimeDB server on the pinned stack; it does not
+> replace it.
 
 ## Stack
 
@@ -57,7 +58,9 @@ battle-tested recipe (same caveat `templates/dockerfiles/bevy-spacetime/Dockerfi
 
 ## What this bundle is not
 
-- Not a minted archetype — `archetype.toml` in this directory carries `minted = false`. No repo's
-  `factory.toml` can declare `archetype = "game"` and pass `forge validate` until a pilot merges.
+- Not a minted archetype — minting is decided solely by `toon-meta/FACTORY.md`
+  (`toon-meta/docs/adr/0002-registry-is-sole-mint-authority.md`), never by this bundle. No repo's
+  `factory.toml` can declare `archetype = "game"` and pass `forge validate` until a pilot merges
+  and the registry records it.
 - Not a `toon-meta/FACTORY.md` edit — the org registry entry for `game` is out of scope for this
   bundle (toon-protocol/Forge#16's toon-meta-side half).

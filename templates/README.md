@@ -70,6 +70,10 @@ Archetype bundles — opinions above the bare `[environment] kind`, named for **
 validate` (#218/#219) are what will actually consume these; until then they are reference
 material plus structural test coverage.
 
-- `game/` — Bevy client + SpacetimeDB server on the pinned stack. **Mint-after-pilot**
-  (`game/archetype.toml`: `minted = false`) — prepared, not declared minted, per ARCHITECTURE.md
-  §8's "an archetype exists only after its pilot" rule. See `game/README.md`.
+- `game/` — Bevy client + SpacetimeDB server on the pinned stack. **Mint-after-pilot** — prepared,
+  not declared minted (minting is decided solely by `toon-meta/FACTORY.md`, never by this bundle;
+  `toon-meta/docs/adr/0002-registry-is-sole-mint-authority.md`), per ARCHITECTURE.md §8's "an
+  archetype exists only after its pilot" rule. See `game/README.md`.
+- `service/` — payment-fronted node service on the pinned `node-pnpm` stack, pinned from its
+  pilot (**relay**): lint/typecheck/test/build + a devbox toolchain smoke-build tier. Also
+  **mint-after-pilot**, same registry-only mint rule as `game`. See `service/README.md`.
