@@ -99,7 +99,7 @@ async function pushBranch(
   const token = await mintToken();
   process.env.GH_TOKEN = token;
 
-  const pushScript = `set -euo pipefail
+  const pushScript = `set -eu
 TOKEN_FILE=$(mktemp)
 export TOKEN_FILE
 chmod 600 "$TOKEN_FILE"
