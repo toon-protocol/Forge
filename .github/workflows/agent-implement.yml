@@ -128,15 +128,18 @@ jobs:
     # maxIterations: 100 is a runaway-loop guard, not a time budget — an
     # iteration has no fixed duration, so no iteration count can "fit" a wall
     # clock. The wall clock is the real budget, and it is deliberately split:
-    # the runner STEP below gets timeout-minutes: 50 so an overlong run dies
-    # as an ordinary step FAILURE, leaving the rest of the job budget for the
-    # always() forensics steps (redact + upload) — a job-level kill would take
-    # those down with it. The job stays at 60 (NOT raised to connector's 180)
-    # because this repo still pushes with the App token minted at job start,
-    # which expires ONE HOUR in (connector#462): with a longer clock a run
-    # would finish its work and still lose the push. Raise to 180/170 only
-    # when the mid-run token mint is ported here (toon-meta#248).
-    timeout-minutes: 60
+    # the runner STEP below gets a timeout below the job's, so an overlong run
+    # dies as an ordinary step FAILURE, leaving the rest of the job budget for
+    # the always() forensics steps (redact + upload) — a job-level kill would
+    # take those down with it. Raised from 60 to connector's 180 (toon-meta#248,
+    # ported from connector#463) now that the push path mints a FRESH App
+    # installation token immediately before every push (`forge-core`'s
+    # `pushBranch`/`mintToken`, via `createTokenMinter`) instead of relying on
+    # the single token minted at job start below, which expires ONE HOUR in
+    # (connector#462) — raising the clock without that fix would have turned
+    # "times out, nothing pushed" into "runs long, then loses the push at the
+    # end" for the same reason, only later and more expensively.
+    timeout-minutes: 180
     concurrency:
       group: agent-implement-issue-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -184,11 +187,22 @@ jobs:
       - name: Run forge implement cycle
         # Step-level timeout (toon-meta#278): below the job's, so a wall-clock
         # kill is a step failure and the always() forensics steps still run.
-        timeout-minutes: 50
+        timeout-minutes: 170
         env:
           SANDCASTLE_ISSUE_NUMBER: ${{ github.event.issue.number }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Bootstrap token — used for the initial `gh issue view` and by the
+          # guard job. The push path re-mints its own token from APP_ID/
+          # APP_PRIVATE_KEY immediately before every push (toon-meta#248) and
+          # refreshes this process's own GH_TOKEN, so this value only needs
+          # to be valid at job start.
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # HOST-only (toon-meta#248): read by forge-cli's `createTokenMinter`
+          # to mint a fresh push credential on demand. Never forwarded into
+          # the sandbox — `sandboxSecrets`'s PASSTHROUGH_KEYS in
+          # packages/forge-cli/src/run.ts deliberately omits both.
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
         run: node packages/forge-cli/dist/cli.js run
 
       # REDACT BEFORE UPLOAD — this repository is PUBLIC.

@@ -73,11 +73,19 @@ export {
   type ReviewRunner,
   type PullRequestRef,
   type PrOpener,
+  type PushEarly,
   type RunCycleOptions,
   type RunCycleReport,
   runPlanImplementCycle,
   runCycle,
 } from './cycle.js';
+
+export {
+  type MintAppTokenConfig,
+  signAppJwt,
+  mintInstallationToken,
+  createTokenMinter,
+} from './mint-app-token.js';
 
 export {
   DEFAULT_PLAN_PROMPT_FILE,
