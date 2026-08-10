@@ -156,6 +156,9 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
     await expect(runners.openPr(DISPATCH, ISSUE)).rejects.toThrow(
       /runImplement must run before/
     );
+    await expect(runners.pushEarly(DISPATCH)).rejects.toThrow(
+      /runImplement must run before/
+    );
     await expect(runners.close()).resolves.toBeUndefined();
   });
 
@@ -567,5 +570,126 @@ describe('createSandcastleRunners: runImplement + exec + runReview + openPr + cl
         (cmd) => typeof cmd === 'string' && /branch\s+-[dD]/.test(cmd)
       )
     ).toBe(false);
+  });
+
+  describe('mintToken (toon-meta#248 — fresh push credential)', () => {
+    it('openPr mints a fresh token immediately before pushing, resets the container-global credential helper first, delivers the token via stdin, and refreshes the host GH_TOKEN', async () => {
+      const sandbox = fakeSandbox({
+        run: vi.fn(async () => sandboxRunResult()),
+        exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      });
+      const createSandbox = vi.fn(async () => sandbox);
+      const prList = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { number: 7, url: 'https://example.com/pull/7' },
+        ]);
+      const prCreate = vi.fn(async () => {});
+      const mintToken = vi.fn(async () => 'ghs_freshtoken');
+
+      const previousGhToken = process.env.GH_TOKEN;
+      try {
+        const runners = createSandcastleRunners({
+          sandboxProvider: SANDBOX_PROVIDER,
+          createSandbox,
+          gh: { prList, prCreate },
+          baseBranch: 'main',
+          mintToken,
+        });
+        await runners.runImplement(AGENT, DISPATCH);
+
+        await runners.openPr(DISPATCH, ISSUE);
+
+        expect(mintToken).toHaveBeenCalledTimes(1);
+        expect(process.env.GH_TOKEN).toBe('ghs_freshtoken');
+
+        const [command, options] = (sandbox.exec as ReturnType<typeof vi.fn>)
+          .mock.calls[0]!;
+        expect(command).toContain(`push -u origin ${DISPATCH.branch}`);
+        // The empty reset MUST precede the one-shot helper (multi-valued
+        // credential.helper — order matters).
+        const resetIndex = command.indexOf('-c credential.helper= ');
+        const oneShotIndex = command.indexOf("-c 'credential.helper=!f()");
+        expect(resetIndex).toBeGreaterThan(-1);
+        expect(oneShotIndex).toBeGreaterThan(resetIndex);
+        expect(options).toEqual({ stdin: 'ghs_freshtoken' });
+      } finally {
+        if (previousGhToken === undefined) delete process.env.GH_TOKEN;
+        else process.env.GH_TOKEN = previousGhToken;
+      }
+    });
+
+    it('pushes exactly as before (no credential-helper override) when mintToken is not configured', async () => {
+      const sandbox = fakeSandbox({
+        run: vi.fn(async () => sandboxRunResult()),
+        exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      });
+      const createSandbox = vi.fn(async () => sandbox);
+      const prList = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { number: 8, url: 'https://example.com/pull/8' },
+        ]);
+      const prCreate = vi.fn(async () => {});
+
+      const runners = createSandcastleRunners({
+        sandboxProvider: SANDBOX_PROVIDER,
+        createSandbox,
+        gh: { prList, prCreate },
+        baseBranch: 'main',
+      });
+      await runners.runImplement(AGENT, DISPATCH);
+      await runners.openPr(DISPATCH, ISSUE);
+
+      expect(sandbox.exec).toHaveBeenCalledWith(
+        `git push -u origin ${DISPATCH.branch}`
+      );
+    });
+  });
+
+  describe('pushEarly (toon-meta#248 — best-effort early publish)', () => {
+    it('pushes the dispatch branch via the same pushBranch path as openPr', async () => {
+      const sandbox = fakeSandbox({
+        run: vi.fn(async () => sandboxRunResult()),
+        exec: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      });
+      const createSandbox = vi.fn(async () => sandbox);
+
+      const runners = createSandcastleRunners({
+        sandboxProvider: SANDBOX_PROVIDER,
+        createSandbox,
+      });
+      await runners.runImplement(AGENT, DISPATCH);
+
+      await runners.pushEarly(DISPATCH);
+
+      expect(sandbox.exec).toHaveBeenCalledWith(
+        `git push -u origin ${DISPATCH.branch}`
+      );
+    });
+
+    it('throws (fails loud) when the push fails — the caller (runCycle) is responsible for making it best-effort', async () => {
+      const sandbox = fakeSandbox({
+        run: vi.fn(async () => sandboxRunResult()),
+        exec: vi.fn(async () => ({
+          exitCode: 1,
+          stdout: '',
+          stderr: 'auth failed',
+        })),
+      });
+      const createSandbox = vi.fn(async () => sandbox);
+
+      const runners = createSandcastleRunners({
+        sandboxProvider: SANDBOX_PROVIDER,
+        createSandbox,
+      });
+      await runners.runImplement(AGENT, DISPATCH);
+
+      await expect(runners.pushEarly(DISPATCH)).rejects.toThrow(
+        /early publish.*push.*failed/
+      );
+    });
   });
 });

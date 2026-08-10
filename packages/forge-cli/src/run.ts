@@ -24,6 +24,7 @@ import type { SandboxHooks, SandboxProvider } from '@ai-hero/sandcastle';
 import {
   loadManifest,
   createSandcastleRunners,
+  createTokenMinter,
   runCycle,
   type FactoryManifest,
   type LabeledIssueRef,
@@ -73,6 +74,25 @@ export const SANDBOX_READY_HOOKS: SandboxHooks = {
   },
 };
 
+/**
+ * Wraps a `mintToken` function so every freshly minted token is registered
+ * with Actions' log masking (`::add-mask::`, a workflow command Actions
+ * parses out of this step's own stdout) the instant it is minted —
+ * defence in depth alongside the redact-then-upload log artifact step
+ * (toon-meta#248/#278): a minted token is never expected to reach a log line,
+ * but masking costs nothing and covers any future code path that logs one
+ * before this repo's log-redaction sweep runs.
+ */
+export function withMasking(
+  mintToken: () => Promise<string>
+): () => Promise<string> {
+  return async () => {
+    const token = await mintToken();
+    console.log(`::add-mask::${token}`);
+    return token;
+  };
+}
+
 /** Fetches an issue's title from GitHub via the host `gh` (authed by GH_TOKEN). */
 function fetchIssueTitle(issueNumber: string): string {
   return execFileSync(
@@ -93,6 +113,14 @@ export interface ForgeRunOptions {
   readonly runCycle?: typeof runCycle;
   readonly getIssueTitle?: (issueNumber: string) => string;
   readonly sandboxProvider?: SandboxProvider;
+  /**
+   * Builds the fresh-push-credential minter (toon-meta#248) from `APP_ID`/
+   * `APP_PRIVATE_KEY`/`GITHUB_REPOSITORY` — HOST-only env vars, never
+   * forwarded into the sandbox (see `sandboxSecrets`'s `PASSTHROUGH_KEYS`,
+   * which deliberately omits them). Returns `undefined` when those vars are
+   * absent, so a local run with only an ambient `GH_TOKEN` is unchanged.
+   */
+  readonly createTokenMinter?: typeof createTokenMinter;
 }
 
 /**
@@ -116,6 +144,9 @@ export async function forgeRun(
   const getIssueTitle = options.getIssueTitle ?? fetchIssueTitle;
   const sandboxProvider =
     options.sandboxProvider ?? docker({ env: sandboxSecrets() });
+  const buildTokenMinter = options.createTokenMinter ?? createTokenMinter;
+  const rawMintToken = buildTokenMinter();
+  const mintToken = rawMintToken ? withMasking(rawMintToken) : undefined;
 
   const manifest = await loadManifestFn(options.manifestPath ?? 'factory.toml');
   const issue: LabeledIssueRef = {
@@ -126,6 +157,7 @@ export async function forgeRun(
   const runners = createRunners({
     sandboxProvider,
     hooks: SANDBOX_READY_HOOKS,
+    mintToken,
   });
 
   try {
@@ -136,6 +168,7 @@ export async function forgeRun(
       runImplement: runners.runImplement,
       runReview: runners.runReview,
       openPr: runners.openPr,
+      pushEarly: runners.pushEarly,
     });
     return report.pr;
   } finally {

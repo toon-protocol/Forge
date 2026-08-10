@@ -226,4 +226,112 @@ describe('runCycle (stubbed, no sandbox required)', () => {
     expect(runReview).toHaveBeenCalledTimes(1);
     expect(openPr).toHaveBeenCalledTimes(1);
   });
+
+  it('publishes the branch right after implement, before the pre-review gate and review (toon-meta#248)', async () => {
+    const manifest = parseManifest(MANIFEST_SOURCE);
+    const dispatch: ImplementDispatch = {
+      task: ISSUE.title,
+      branch: 'sandcastle/issue-23',
+    };
+    const runPlan = vi.fn(async () => dispatch);
+    const firstIteration: Iteration = { commits: [{ sha: 'c1' }] };
+    const runImplement = vi.fn(async () => firstIteration);
+    const exec = vi
+      .fn()
+      .mockResolvedValueOnce(execResult(0, 'ok'))
+      .mockResolvedValueOnce(execResult(0, 'ok'));
+
+    const callOrder: string[] = [];
+    const pushEarly = vi.fn(async (_dispatch: ImplementDispatch) => {
+      callOrder.push('pushEarly');
+    });
+    const runReview = vi.fn(async () => {
+      callOrder.push('runReview');
+      return { commits: [] } as ReviewResult;
+    });
+    const openPr = vi.fn(async () => {
+      callOrder.push('openPr');
+      return { number: 1, url: 'https://example.com/pull/1' } as PullRequestRef;
+    });
+
+    await runCycle(ISSUE, {
+      manifest,
+      exec,
+      runPlan,
+      runImplement,
+      runReview,
+      openPr,
+      pushEarly,
+    });
+
+    expect(pushEarly).toHaveBeenCalledTimes(1);
+    expect(pushEarly).toHaveBeenCalledWith(dispatch);
+    expect(callOrder).toEqual(['pushEarly', 'runReview', 'openPr']);
+  });
+
+  it('swallows a failed early publish — the cycle still completes (best-effort, toon-meta#248)', async () => {
+    const manifest = parseManifest(MANIFEST_SOURCE);
+    const dispatch: ImplementDispatch = {
+      task: ISSUE.title,
+      branch: 'sandcastle/issue-23',
+    };
+    const runPlan = vi.fn(async () => dispatch);
+    const firstIteration: Iteration = { commits: [{ sha: 'c1' }] };
+    const runImplement = vi.fn(async () => firstIteration);
+    const exec = vi
+      .fn()
+      .mockResolvedValueOnce(execResult(0, 'ok'))
+      .mockResolvedValueOnce(execResult(0, 'ok'));
+
+    const pushEarly = vi.fn(async () => {
+      throw new Error('transient network blip');
+    });
+    const runReview = vi.fn(async () => ({ commits: [] }) as ReviewResult);
+    const pr: PullRequestRef = { number: 2, url: 'https://example.com/pull/2' };
+    const openPr = vi.fn(async () => pr);
+
+    const report = await runCycle(ISSUE, {
+      manifest,
+      exec,
+      runPlan,
+      runImplement,
+      runReview,
+      openPr,
+      pushEarly,
+    });
+
+    expect(pushEarly).toHaveBeenCalledTimes(1);
+    expect(report.pr).toEqual(pr);
+  });
+
+  it('skips early publish entirely when pushEarly is omitted', async () => {
+    const manifest = parseManifest(MANIFEST_SOURCE);
+    const dispatch: ImplementDispatch = {
+      task: ISSUE.title,
+      branch: 'sandcastle/issue-23',
+    };
+    const runPlan = vi.fn(async () => dispatch);
+    const firstIteration: Iteration = { commits: [{ sha: 'c1' }] };
+    const runImplement = vi.fn(async () => firstIteration);
+    const exec = vi
+      .fn()
+      .mockResolvedValueOnce(execResult(0, 'ok'))
+      .mockResolvedValueOnce(execResult(0, 'ok'));
+    const runReview = vi.fn(async () => ({ commits: [] }) as ReviewResult);
+    const openPr = vi.fn(
+      async () =>
+        ({ number: 3, url: 'https://example.com/pull/3' }) as PullRequestRef
+    );
+
+    await expect(
+      runCycle(ISSUE, {
+        manifest,
+        exec,
+        runPlan,
+        runImplement,
+        runReview,
+        openPr,
+      })
+    ).resolves.toBeDefined();
+  });
 });

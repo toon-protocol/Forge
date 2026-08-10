@@ -42,11 +42,64 @@ import { execFileSync } from "node:child_process";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { sandboxSecrets } from "./sandbox-secrets.ts";
+import { createTokenMinter } from "./mint-app-token.ts";
 import {
   resolveFactoryOpsIdentity,
   runReviewerWithVerdict,
   submitFactoryOpsVerdict,
 } from "./review-verdict.ts";
+
+// Fresh-push-credential minter (toon-meta#248, ported from connector#463):
+// APP_ID/APP_PRIVATE_KEY are HOST-only — see ./sandbox-secrets.ts's
+// PASSTHROUGH_KEYS, which deliberately omits both. `undefined` when they are
+// absent (local dev / no App installed) — `pushBranch` below then falls back
+// to the ambient GH_TOKEN + the container-global credential helper wired in
+// `hooks` below, unchanged from before this fix.
+const mintToken = createTokenMinter();
+
+/**
+ * Pushes `branch` to origin, minting a fresh App installation token
+ * immediately before the push when `mintToken` is configured instead of
+ * relying on the token minted once at workflow start, which expires ONE HOUR
+ * in (connector#462). Refreshes `process.env.GH_TOKEN` too — the `gh pr
+ * create`/`gh pr list` calls right after a push authenticate from the same
+ * expiring credential.
+ *
+ * The fresh token is delivered into the sandbox via STDIN into a mode-600
+ * file, read back by a one-shot `credential.helper` and deleted immediately
+ * after. The leading `-c credential.helper=` is LOAD-BEARING: `credential.
+ * helper` is a MULTI-VALUED git config key, so an empty value is required to
+ * RESET the list before the one-shot helper is added — without it, the
+ * container-global helper `gh auth setup-git` installed in `hooks` below at
+ * sandbox start is still consulted FIRST and the freshly minted token is
+ * silently never used.
+ */
+async function pushBranch(
+  sandboxHandle: Awaited<ReturnType<typeof sandcastle.createSandbox>>,
+  branch: string,
+) {
+  if (!mintToken) {
+    return sandboxHandle.exec(`git push -u origin ${branch}`, {
+      onLine: (line) => console.log(`  [push] ${line}`),
+    });
+  }
+
+  const token = await mintToken();
+  process.env.GH_TOKEN = token;
+
+  const pushScript = `set -euo pipefail
+TOKEN_FILE=$(mktemp)
+export TOKEN_FILE
+chmod 600 "$TOKEN_FILE"
+cat > "$TOKEN_FILE"
+trap 'rm -f "$TOKEN_FILE"' EXIT
+git -c credential.helper= -c 'credential.helper=!f() { echo "username=x-access-token"; echo "password=$(cat "$TOKEN_FILE")"; }; f' push -u origin ${branch}
+`;
+  return sandboxHandle.exec(pushScript, {
+    stdin: token,
+    onLine: (line) => console.log(`  [push] ${line}`),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -171,6 +224,20 @@ try {
     process.exit(0);
   }
 
+  // Publish EARLY, best-effort (toon-meta#248, ported from connector#463): a
+  // run killed during review or gate-fixing still leaves the implementer's
+  // completed work on the remote instead of discarding the sandbox. A
+  // failure here must NOT fail the run — the PR-mode push below is the one
+  // that must succeed.
+  try {
+    console.log("\nPublishing branch early (best-effort)...");
+    await pushBranch(sandbox, branch);
+  } catch (err) {
+    console.error(
+      `Early publish failed (continuing) — ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   // Review (opus, 1 iteration) on the SAME branch, with the structured
   // verdict REQUIRED (toon-meta#275): the reviewer receives the issue via
   // promptArgs (Spec axis — it reviews against the issue's acceptance
@@ -222,9 +289,7 @@ try {
     // non-zero exitCode (it does NOT throw) — check it and fail loud.
     console.log("\nPR mode — pushing branch and opening a PR for human review.");
 
-    const push = await sandbox.exec(`git push -u origin ${branch}`, {
-      onLine: (line) => console.log(`  [push] ${line}`),
-    });
+    const push = await pushBranch(sandbox, branch);
     if (push.exitCode !== 0) {
       throw new Error(
         `git push of '${branch}' failed (exit ${push.exitCode}).\n${push.stderr}`,
