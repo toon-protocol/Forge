@@ -1,0 +1,90 @@
+# factory-proof — CI-verified live-run proof of the full
+# label→plan→implement→inner-gates→review→PR cycle (Forge#25, closes
+# Forge#8's acceptance).
+#
+# WHAT THIS DOES:
+#   Runs `forge factory-proof` (packages/forge-cli/src/factory-proof.ts): seeds
+#   a disposable throwaway issue, applies `agent:implement` to it, correlates
+#   + polls the REAL run that labeling fires via agent-implement.yml, and
+#   asserts the acceptance criteria against the GitHub API — the run
+#   completed, it opened a PR referencing the seed issue, that PR was left
+#   open (no auto-merge), and the PR's `ci.yml` gate is green. Writes the
+#   findings to `.sandcastle/logs/factory-proof-report.json` (uploaded as an
+#   artifact below) and fails the job on any unmet criterion. Cleans up the
+#   throwaway issue + PR itself once the proof completes, pass or fail.
+#
+#   This IS the proof, mechanized: a regression test for the factory that
+#   runs whenever a human dispatches it, not a paragraph someone writes once
+#   after watching a run go by (see Forge#25/#8's rescope note for the case).
+#
+# COST NOTE: dispatching this fires one real agent:implement cycle — the
+# same spend as any other agent:implement labeling. Not scheduled; manual
+# dispatch only.
+#
+# FIRST-RUN GOTCHA (documented, not yet proven live — see
+# docs/factory-runbook.md): agent-implement.yml's `guard` job requires the
+# labeling actor to hold `write`/`maintain`/`admin` permission via
+# `repos/{repo}/collaborators/{actor}/permission`. This job labels as the
+# SAME GitHub App agent-implement.yml already uses to open PRs (APP_ID/
+# APP_PRIVATE_KEY) on the theory that an App with push access resolves the
+# same way — unverified until the first live dispatch. If Guard 1 refuses the
+# App's bot identity, the fix is a maintainer PAT secret instead, not a
+# change to the guard (Guard 1 exists to refuse drive-by labeling).
+
+name: factory-proof
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+  checks: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    # Correlate-poll (~5 min) + completion-poll (up to ~1h, inside
+    # agent-implement.yml's own 180-minute cap) + gate wait — generous but
+    # bounded; a hung proof must not run forever.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm via corepack
+        run: corepack enable && corepack prepare pnpm@8.15.9 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build forge-core + forge-cli
+        run: pnpm build
+
+      # Same App already used by agent-implement.yml to open PRs — see the
+      # FIRST-RUN GOTCHA note above for why.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Run forge factory-proof
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node packages/forge-cli/dist/cli.js factory-proof
+
+      - name: Upload proof report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-proof-report
+          path: .sandcastle/logs/factory-proof-report.json
+          if-no-files-found: warn
+          retention-days: 90

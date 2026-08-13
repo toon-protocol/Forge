@@ -18,11 +18,19 @@
  * (toon-meta#178): a gate is wired only once doctor is green. `upgrade`
  * (#13) re-runs the stamping engine over this repo's own `factory.toml`
  * against current templates and, on any diff, opens (or reuses) an ordinary
- * PR through this repo's own gate. The remaining verb (`status`) is a
- * scaffold stub (#212) — it recognizes the surface and exits non-zero so the
- * bin is wired but honest about being empty.
+ * PR through this repo's own gate. `factory-proof` (Forge#25) seeds a
+ * disposable throwaway issue, labels it `agent:implement`, waits for the
+ * real cycle it fires, and asserts the label→plan→implement→inner-gates→
+ * review→PR acceptance criteria against the GitHub API — a CI-verified
+ * regression test for the factory itself, not a one-off human observation.
+ * The remaining verb (`status`) is a scaffold stub (#212) — it recognizes
+ * the surface and exits non-zero so the bin is wired but honest about being
+ * empty.
  */
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { loadManifest } from '@toon-protocol/forge-core';
 import type { ForgeCommand } from './index.js';
 import { version } from './index.js';
 import { forgeRun } from './run.js';
@@ -31,6 +39,7 @@ import { parseNewArgs, resolveStampPlan, formatStampPlan } from './new.js';
 import { stamp } from './stamp.js';
 import { validateStampedOutput } from './validate-stamp.js';
 import { forgeValidate } from './validate.js';
+import { runFactoryProof, formatProofReport } from './factory-proof.js';
 import { registerFactory } from './register.js';
 import { formatDoctorReport, forgeDoctor } from './doctor.js';
 import { forgeUpgrade } from './upgrade.js';
@@ -42,6 +51,7 @@ const KNOWN: readonly ForgeCommand[] = [
   'validate',
   'doctor',
   'upgrade',
+  'factory-proof',
   'status',
 ];
 
@@ -150,6 +160,25 @@ async function main(argv: readonly string[]): Promise<number> {
       );
     }
     return 0;
+  }
+
+  if (cmd === 'factory-proof') {
+    const manifest = await loadManifest('factory.toml');
+    const report = await runFactoryProof({ manifest });
+
+    // "Recording proof is a file the run writes, not a note somebody takes"
+    // (Forge#25) — a committed/uploaded artifact, not console output alone.
+    const reportPath =
+      process.env.FACTORY_PROOF_REPORT_PATH ??
+      '.sandcastle/logs/factory-proof-report.json';
+    await mkdir(dirname(reportPath), { recursive: true });
+    await writeFile(reportPath, JSON.stringify(report, null, 2));
+
+    process.stdout.write(`${formatProofReport(report)}\n`);
+    process.stdout.write(
+      `forge factory-proof: report written to ${reportPath}\n`
+    );
+    return report.passed ? 0 : 1;
   }
 
   if (cmd !== undefined && (STUBBED as readonly string[]).includes(cmd)) {

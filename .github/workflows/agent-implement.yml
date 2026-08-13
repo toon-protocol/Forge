@@ -33,6 +33,13 @@
 
 name: agent:implement
 
+# Correlates a run back to the issue that fired it (Forge#25) — the EXACT tier
+# of the two-tier match ported from toon-meta's reap-evaluator.mjs
+# `findRunForLabel` (toon-meta#359 is that same addition upstream). Without
+# this, correlation falls back to a labeled-timestamp time window, which is a
+# reliable proxy but not an exact one.
+run-name: "agent:implement — issue #${{ github.event.issue.number }}"
+
 on:
   issues:
     types: [labeled]
