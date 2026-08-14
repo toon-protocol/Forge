@@ -20,6 +20,7 @@
     "sandcastle": "tsx .sandcastle/main.ts",
     "sandcastle:plan": "tsx .sandcastle/plan-dry-run.ts",
     "sandcastle:implement": "tsx .sandcastle/agent-implement-issue.ts",
+    "sandcastle:fix": "tsx .sandcastle/agent-fix-pr.ts",
     "sandcastle:review": "tsx .sandcastle/agent-review-pr.ts"
   },
   "devDependencies": {
