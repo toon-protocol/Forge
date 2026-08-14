@@ -26,6 +26,7 @@ import {
   type Role,
   ROLES,
   branchForIssue,
+  loadManifest as loadManifestDefault,
 } from '@toon-protocol/forge-core';
 
 export interface WorkflowRunSummary {
@@ -526,7 +527,9 @@ const defaultSleep: Sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface FactoryProofOptions {
-  readonly manifest: FactoryManifest;
+  /** Path to the `factory.toml` to resolve per-role models from. Defaults to `./factory.toml`. */
+  readonly manifestPath?: string;
+  readonly loadManifest?: (path: string) => Promise<FactoryManifest>;
   readonly gh?: FactoryProofGhClient;
   readonly sleep?: Sleep;
   readonly now?: () => Date;
@@ -560,13 +563,15 @@ export interface FactoryProofOptions {
  * fails a criterion (which is reported, not thrown).
  */
 export async function runFactoryProof(
-  options: FactoryProofOptions
+  options: FactoryProofOptions = {}
 ): Promise<FactoryProofReport> {
   const gh = options.gh ?? defaultFactoryProofGhClient;
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? (() => new Date());
   const label = options.label ?? DEFAULT_PROOF_LABEL;
   const workflowFile = options.workflowFile ?? DEFAULT_PROOF_WORKFLOW_FILE;
+  const loadManifestFn = options.loadManifest ?? loadManifestDefault;
+  const manifest = await loadManifestFn(options.manifestPath ?? 'factory.toml');
 
   const stampIso = now().toISOString();
   const issue = await gh.createIssue({
@@ -618,7 +623,7 @@ export async function runFactoryProof(
       const logText = await gh.getRunLogText({ id: run.id });
       modelTieringEvidence = checkModelTieringEvidence(
         logText,
-        options.manifest.loop.models
+        manifest.loop.models
       );
     } catch {
       // Best-effort — a log-fetch failure must not fail the whole proof.

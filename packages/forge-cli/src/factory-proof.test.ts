@@ -359,13 +359,15 @@ describe('runFactoryProof', () => {
   it('seeds an issue, labels it, correlates + polls to completion, and returns a passing report', async () => {
     const gh = fakeGh();
     const sleep = vi.fn(async () => {});
+    const loadManifest = vi.fn(async () => MANIFEST);
     const report = await runFactoryProof({
-      manifest: MANIFEST,
+      loadManifest,
       gh,
       sleep,
       now: () => new Date(LABELED_AT),
     });
 
+    expect(loadManifest).toHaveBeenCalledWith('factory.toml');
     expect(report.passed).toBe(true);
     expect(gh.createIssue).toHaveBeenCalledTimes(1);
     expect(gh.addLabel).toHaveBeenCalledWith({
@@ -398,7 +400,7 @@ describe('runFactoryProof', () => {
     const sleep = vi.fn(async () => {});
 
     const report = await runFactoryProof({
-      manifest: MANIFEST,
+      loadManifest: async () => MANIFEST,
       gh,
       sleep,
       now: () => new Date(LABELED_AT),
@@ -416,7 +418,7 @@ describe('runFactoryProof', () => {
 
     await expect(
       runFactoryProof({
-        manifest: MANIFEST,
+        loadManifest: async () => MANIFEST,
         gh,
         sleep,
         now: () => new Date(LABELED_AT),
@@ -436,7 +438,7 @@ describe('runFactoryProof', () => {
 
     await expect(
       runFactoryProof({
-        manifest: MANIFEST,
+        loadManifest: async () => MANIFEST,
         gh,
         sleep,
         now: () => new Date(LABELED_AT),
@@ -448,7 +450,7 @@ describe('runFactoryProof', () => {
   it('skips cleanup when cleanup: false', async () => {
     const gh = fakeGh();
     await runFactoryProof({
-      manifest: MANIFEST,
+      loadManifest: async () => MANIFEST,
       gh,
       sleep: vi.fn(async () => {}),
       now: () => new Date(LABELED_AT),
@@ -465,7 +467,7 @@ describe('runFactoryProof', () => {
       }),
     });
     const report = await runFactoryProof({
-      manifest: MANIFEST,
+      loadManifest: async () => MANIFEST,
       gh,
       sleep: vi.fn(async () => {}),
       now: () => new Date(LABELED_AT),

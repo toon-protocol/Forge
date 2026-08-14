@@ -30,7 +30,6 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { loadManifest } from '@toon-protocol/forge-core';
 import type { ForgeCommand } from './index.js';
 import { version } from './index.js';
 import { forgeRun } from './run.js';
@@ -163,8 +162,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (cmd === 'factory-proof') {
-    const manifest = await loadManifest('factory.toml');
-    const report = await runFactoryProof({ manifest });
+    const report = await runFactoryProof();
 
     // "Recording proof is a file the run writes, not a note somebody takes"
     // (Forge#25) — a committed/uploaded artifact, not console output alone.
